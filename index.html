@@ -2446,64 +2446,77 @@ function genReport(){
   }
 
 
-  // ── MODE REPOS COMPENSATEUR ──
+  // ── MODE VACANCES (REPOS COMPENSATEUR) ──
   if(rtype==='repos'){
     const cag=calcCagnotte();
-    const rcList=entries.filter(e=>e.type==='leave'&&e.leaveType==='repos').sort((a,b)=>a.date.localeCompare(b.date));
+    // Filtre par période si sélectionnée
+    const inP=from&&to?(e=>e.date>=from&&e.date<=to):(()=>true);
+    const rcListAll=entries.filter(e=>e.type==='leave'&&e.leaveType==='repos').sort((a,b)=>a.date.localeCompare(b.date));
+    const rcListPeriod=rcListAll.filter(inP);
     const ts=now.toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    const periodLabel2=from&&to?dStr(from)+' → '+dStr(to):'Toute la période';
 
     L.push('==============================================================');
-    L.push('  RÉCAPITULATIF REPOS COMPENSATEUR (HS CDI)');
+    L.push('  VACANCES — RÉCAPITULATIF DES REPOS COMPENSATEURS');
     L.push('==============================================================');
     L.push('  Salarié   : '+name);
+    L.push('  Période   : '+periodLabel2);
     L.push('  Établi le : '+ts);
     L.push('==============================================================');
     L.push('');
-    L.push('  CAGNOTTE HS MAJORÉES');
+    L.push('  CAGNOTTE HS MAJORÉES (globale)');
     L.push(SEP);
     L.push('  HS tranche +25%         : '+hhmm(cag.s1)+' × 1.25 = '+hhmm(cag.s1+cag.s1Maj));
     L.push('  HS tranche +50%         : '+hhmm(cag.s2)+' × 1.50 = '+hhmm(cag.s2+cag.s2Maj));
     L.push('  Total HS majorées brutes: '+hhmm(cag.hsMajBrut));
     L.push('');
 
-    if(rcList.length>0){
-      L.push('  REPOS COMPENSATEUR POSÉS');
-      L.push(SEP);
-      rcList.forEach((e,i)=>{
-        L.push('  '+(i+1)+'. '+dStr(e.date)+'  →  7h00 déduites'+(e.note?' ('+e.note+')':''));
+    L.push('  VACANCES (RC) POSÉES'+(from&&to?' — '+periodLabel2:''));
+    L.push(SEP);
+    if(rcListPeriod.length>0){
+      // Grouper par semaine avec alternance visuelle
+      const byWeek={};
+      rcListPeriod.forEach(e=>{ const wk=isoWeek(e.date); if(!byWeek[wk])byWeek[wk]=[]; byWeek[wk].push(e); });
+      let idx=0;
+      Object.entries(byWeek).sort().forEach(([wk,days])=>{
+        const s1=idx%2===0?'  ┌'+'-'.repeat(50)+'┐':'  ╔'+'═'.repeat(50)+'╗';
+        const s2=idx%2===0?'  └'+'-'.repeat(50)+'┘':'  ╚'+'═'.repeat(50)+'╝';
+        L.push(''); L.push(s1);
+        L.push('  │  '+isoWeekLabel(wk).padEnd(48)+'│');
+        days.forEach(e=>{ L.push('  │  🏖️ '+dStr(e.date).padEnd(20)+'7h00 déduites'.padEnd(26)+'│'); });
+        L.push(s2);
+        idx++;
       });
       L.push('');
-      L.push('  Total posé : '+rcList.length+' jour(s) = '+hhmm(rcList.length*DAY7)+' déduit(s)');
+      L.push('  Total sur la période : '+rcListPeriod.length+' jour(s) = '+hhmm(rcListPeriod.length*DAY7));
+      if(rcListAll.length!==rcListPeriod.length)
+        L.push('  Total tous posés     : '+rcListAll.length+' jour(s) = '+hhmm(rcListAll.length*DAY7));
     } else {
-      L.push('  REPOS COMPENSATEUR POSÉS');
-      L.push(SEP);
-      L.push('  Aucun repos compensateur posé à ce jour.');
+      L.push('  Aucun repos posé sur cette période.');
+      if(rcListAll.length>0) L.push('  ('+rcListAll.length+' jour(s) posés sur d\'autres périodes)');
     }
 
     L.push('');
     L.push(SEP);
-    L.push('  SOLDE DISPONIBLE');
+    L.push('  SOLDE GLOBAL');
     L.push(SEP);
     L.push('  HS majorées brutes : '+hhmm(cag.hsMajBrut));
-    L.push('  Repos posés        : − '+hhmm(rcList.length*DAY7)+' ('+rcList.length+' j × 7h)');
+    L.push('  Repos posés (total): − '+hhmm(rcListAll.length*DAY7)+' ('+rcListAll.length+' j × 7h)');
     L.push('  ─────────────────────────────────────');
     L.push('  SOLDE RESTANT      : '+hhmm(cag.cagnotte));
     L.push('  Soit               : '+cag.joursDispos+' jour(s) entier(s) disponible(s)');
-    if(cag.cagnotte%DAY7>0) L.push('  + '+hhmm(cag.cagnotte%DAY7)+' restant (< 7h, non convertible)');
+    if(cag.cagnotte%DAY7>0) L.push('  + '+hhmm(cag.cagnotte%DAY7)+' (< 7h, non convertible)');
     L.push('');
     L.push('==============================================================');
     L.push('  Signature employeur : ___________________________');
     L.push('  Signature salarié   : ___________________________');
     L.push('==============================================================');
 
-    // Afficher
     const out=document.getElementById('report-out');
     out.textContent=L.join('\n');
     out.style.display='block';
-    ['r-sel','r-mail','r-dl','r-pdf'].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.style.display='inline-block';
-    });
-    toast('✓ Récapitulatif repos compensateur généré');
+    ['r-sel','r-mail','r-dl','r-pdf'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='inline-block'; });
+    toast('✓ Vacances générées : '+periodLabel2);
     return;
   }
 

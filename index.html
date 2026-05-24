@@ -2369,36 +2369,29 @@ function genReport(){
   const to=document.getElementById('r-to').value;
   // ── MODE PROPOSITION REPOS (SYNTHÈSE COMPLÈTE) ──
   if(rtype==='proposition'){
+    if(!from||!to){ toast('Sélectionnez une période (Du … Au …).','err'); return; }
     const cag=calcCagnotte();
-    // Filtre période si sélectionnée
-    const inP=e=> (!from&&!to) || (e.date>=(from||'0000') && e.date<=(to||'9999'));
-    const lList=entries.filter(e=>e.type==='leave'&&inP(e));
-    const lListAll=entries.filter(e=>e.type==='leave'); // pour compteurs globaux
-    const cpN=lListAll.filter(e=>e.leaveType==='cp').length;
-    const cpR=Math.max(0,calcCPAcquis()-cpN);
-    const cpList=lList.filter(e=>e.leaveType==='cp').sort((a,b)=>a.date.localeCompare(b.date));
-    const rcList=lList.filter(e=>e.leaveType==='repos').sort((a,b)=>a.date.localeCompare(b.date));
+    const inP=e=>e.date>=from&&e.date<=to;
+    const lListPeriod=entries.filter(e=>e.type==='leave'&&inP(e));
+    const lListAll=entries.filter(e=>e.type==='leave');
+    const cpAcquis=calcCPAcquis();
+    const cpNAll=lListAll.filter(e=>e.leaveType==='cp').length;
+    const cpR=Math.max(0,cpAcquis-cpNAll);
+    const cpList=lListPeriod.filter(e=>e.leaveType==='cp').sort((a,b)=>a.date.localeCompare(b.date));
+    const rcList=lListPeriod.filter(e=>e.leaveType==='repos').sort((a,b)=>a.date.localeCompare(b.date));
     const feriesWE=getAllFeriesWERecuperables();
-    const ferPList=lList.filter(e=>e.leaveType==='ferie_report').sort((a,b)=>a.date.localeCompare(b.date));
-    const ferRest=Math.max(0,feriesWE.length-lListAll.filter(e=>e.leaveType==='ferie_report').length);
+    const ferPList=lListPeriod.filter(e=>e.leaveType==='ferie_report').sort((a,b)=>a.date.localeCompare(b.date));
+    const ferPListAll=lListAll.filter(e=>e.leaveType==='ferie_report');
+    const ferRest=Math.max(0,feriesWE.length-ferPListAll.length);
     const ts=now.toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    const periodLabel2=from&&to?dStr(from)+' → '+dStr(to):'Toute la période';
-
-    // Fusionner toutes les absences de la période pour affichage groupé par semaine
+    const periodLabel2=dStr(from)+' → '+dStr(to);
     const allAbsences=[
       ...cpList.map(e=>({...e,label:'📅 CP'})),
       ...rcList.map(e=>({...e,label:'🏖️ Vacances (RC)'})),
       ...ferPList.map(e=>({...e,label:'🎉 Férié récupéré'})),
     ].sort((a,b)=>a.date.localeCompare(b.date));
-
-    // Grouper par semaine ISO
     const byWeek={};
-    allAbsences.forEach(e=>{
-      const wk=isoWeek(e.date);
-      if(!byWeek[wk]) byWeek[wk]=[];
-      byWeek[wk].push(e);
-    });
-
+    allAbsences.forEach(e=>{ const wk=isoWeek(e.date); if(!byWeek[wk])byWeek[wk]=[]; byWeek[wk].push(e); });
     L.push('==============================================================');
     L.push('  PROPOSITION DE VACANCES / REPOS — SYNTHÈSE');
     L.push('==============================================================');
@@ -2406,89 +2399,49 @@ function genReport(){
     L.push('  Période   : '+periodLabel2);
     L.push('  Établi le : '+ts);
     L.push('==============================================================');
-
-    // ── PLANNING PAR SEMAINE avec alternance visuelle ──
     if(allAbsences.length){
-      L.push('');
-      L.push('  PLANNING DES ABSENCES PAR SEMAINE');
-      L.push(SEP);
-      const weeks=Object.entries(byWeek).sort();
-      weeks.forEach(([wk,days],idx)=>{
-        // Alternance de séparateurs pour distinction visuelle
-        const sep=idx%2===0?'  ┌'+'-'.repeat(58)+'┐':'  ╔'+'═'.repeat(58)+'╗';
-        const sep2=idx%2===0?'  └'+'-'.repeat(58)+'┘':'  ╚'+'═'.repeat(58)+'╝';
-        L.push('');
-        L.push(sep);
+      L.push(''); L.push('  PLANNING DES ABSENCES SUR LA PÉRIODE'); L.push(SEP);
+      Object.entries(byWeek).sort().forEach(([wk,days],idx)=>{
+        const s1=idx%2===0?'  ┌'+'-'.repeat(58)+'┐':'  ╔'+'═'.repeat(58)+'╗';
+        const s2=idx%2===0?'  └'+'-'.repeat(58)+'┘':'  ╚'+'═'.repeat(58)+'╝';
+        L.push(''); L.push(s1);
         L.push('  │  '+isoWeekLabel(wk).padEnd(56)+'│');
-        L.push(sep2.replace(/[┘╝]/,'┤').replace(/[└╚]/,'├'));
-        days.forEach(e=>{
-          L.push('  │  '+e.label.padEnd(24)+dStr(e.date).padEnd(20)+(e.note?e.note.substring(0,12):'').padEnd(12)+'│');
-        });
-        L.push(idx%2===0?'  └'+'-'.repeat(58)+'┘':'  ╚'+'═'.repeat(58)+'╝');
+        days.forEach(e=>{ L.push('  │  '+e.label.padEnd(22)+dStr(e.date).padEnd(20)+(e.note?e.note.substring(0,14):'').padEnd(14)+'│'); });
+        L.push(s2);
       });
-    } else {
-      L.push('  Aucune absence sur cette période.');
-    }
-
-    // ── CP ──
+    } else { L.push('  Aucune absence enregistrée sur cette période.'); }
     L.push(''); L.push('');
-    L.push('  1. CONGÉS PAYÉS (CP)');
-    L.push(SEP);
-    L.push('  CP acquis à ce jour : '+calcCPAcquis()+' jours (embauche 05/01/2026)');
-    L.push('  CP posés            : '+cpN+' jour(s)'+( cpList.length&&from?' dont '+cpList.length+' sur la période':''));
-    if(cpList.length){ cpList.forEach((e,i)=>L.push('    📅 CP '+(i+1)+'. '+dStr(e.date)+(e.note?' — '+e.note:''))); }
-    L.push('  CP restants         : '+cpR+' jour(s)');
-
-    // ── FÉRIÉS WE ──
-    L.push(''); L.push('  2. FÉRIÉS TOMBANT UN WEEK-END (récupérables)');
-    L.push(SEP);
-    if(feriesWE.length===0){
-      L.push('  Aucun jour férié WE cette année.');
-    } else {
-      feriesWE.forEach(d=>{
-        const dow=new Date(d+'T12:00').getDay();
-        const posé=lListAll.find(e=>e.leaveType==='ferie_report'&&e.note&&e.note.includes(d));
-        const status=posé?'✓ Récupéré le '+dStr(posé.date):'⏳ À poser';
-        L.push('  🎉 '+dStr(d)+' ('+(dow===6?'Sam':'Dim')+') → '+status);
-      });
-      L.push('  Fériés WE posés : '+lListAll.filter(e=>e.leaveType==='ferie_report').length+' / '+feriesWE.length);
-    }
-
-    // ── VACANCES (RC) ──
-    L.push(''); L.push('  3. VACANCES (REPOS COMPENSATEUR HS)');
-    L.push(SEP);
-    L.push('  HS majorées brutes : '+hhmm(cag.hsMajBrut));
-    L.push('  Repos posés        : '+lListAll.filter(e=>e.leaveType==='repos').length+' jour(s) = '+hhmm(lListAll.filter(e=>e.leaveType==='repos').length*DAY7)+' déduit(s)');
-    if(rcList.length){ rcList.forEach((e,i)=>L.push('    🏖️ RC '+(i+1)+'. '+dStr(e.date)+(e.note?' — '+e.note:''))); }
-    L.push('  Solde restant      : '+hhmm(cag.cagnotte)+' = '+cag.joursDispos+' jour(s)');
-
-    // ── RÉCAPITULATIF ──
-    L.push(''); L.push(SEP);
-    L.push('  RÉCAPITULATIF GLOBAL');
-    L.push(SEP);
+    L.push('  1. CONGÉS PAYÉS (CP) — période : '+periodLabel2); L.push(SEP);
+    L.push('  CP acquis à ce jour : '+cpAcquis+' jours');
+    L.push('  CP sur la période   : '+cpList.length+' jour(s)');
+    if(cpList.length) cpList.forEach((e,i)=>L.push('    📅 CP '+(i+1)+'. '+dStr(e.date)+(e.note?' — '+e.note:'')));
+    L.push('  CP restants (total) : '+cpR+' jour(s)');
+    const ferWEPeriod=feriesWE.filter(d=>d>=from&&d<=to);
+    L.push(''); L.push('  2. FÉRIÉS WE SUR LA PÉRIODE'); L.push(SEP);
+    if(!ferWEPeriod.length){ L.push('  Aucun jour férié WE sur cette période.'); }
+    else { ferWEPeriod.forEach(d=>{ const dow=new Date(d+'T12:00').getDay(); const p=ferPListAll.find(e=>e.note&&e.note.includes(d)); L.push('  🎉 '+dStr(d)+' ('+(dow===6?'Sam':'Dim')+') → '+(p?'✓ Récupéré le '+dStr(p.date):'⏳ À poser')); }); }
+    if(ferPList.length){ L.push(''); L.push('  Récupérations posées sur la période :'); ferPList.forEach((e,i)=>L.push('    🎉 '+(i+1)+'. '+dStr(e.date)+(e.note?' ('+e.note+')':''))); }
+    L.push(''); L.push('  3. VACANCES (RC) — période : '+periodLabel2); L.push(SEP);
+    L.push('  HS majorées brutes  : '+hhmm(cag.hsMajBrut));
+    L.push('  RC sur la période   : '+rcList.length+' jour(s)');
+    if(rcList.length) rcList.forEach((e,i)=>L.push('    🏖️ RC '+(i+1)+'. '+dStr(e.date)+(e.note?' — '+e.note:'')));
+    L.push('  Solde restant       : '+hhmm(cag.cagnotte)+' = '+cag.joursDispos+' jour(s)');
+    L.push(''); L.push(SEP); L.push('  RÉCAPITULATIF GLOBAL'); L.push(SEP);
     L.push('  📅 CP restants              : '+cpR+' jour(s)');
     L.push('  🎉 Fériés WE à récupérer   : '+ferRest+' jour(s)');
     L.push('  🏖️ Vacances (RC) restantes  : '+cag.joursDispos+' jour(s) ('+hhmm(cag.cagnotte)+')');
     L.push('  ─────────────────────────────────────────');
     L.push('  TOTAL JOURS DISPONIBLES     : '+(cpR+ferRest+cag.joursDispos)+' jour(s)');
     L.push('');
-
-    // Suggestions ponts/vacances
-    const suggLines=getHSSuggestionsText(String(now.getFullYear()), cpR, cag.joursDispos);
-    if(suggLines.length){ suggLines.forEach(l=>L.push(l)); }
-
     L.push('==============================================================');
     L.push('  Signature employeur : ___________________________');
     L.push('  Signature salarié   : ___________________________');
     L.push('==============================================================');
-
     const out=document.getElementById('report-out');
     out.textContent=L.join('\n');
     out.style.display='block';
-    ['r-sel','r-mail','r-dl','r-pdf'].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.style.display='inline-block';
-    });
-    toast('✓ Proposition de vacances/repos générée');
+    ['r-sel','r-mail','r-dl','r-pdf'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='inline-block'; });
+    toast('✓ Proposition générée : '+periodLabel2);
     return;
   }
 

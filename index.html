@@ -920,6 +920,19 @@ function isoWeekLabel(wk){
   return `S${wn} — ${fmt(mon)} au ${fmt(sun)}/${sun.getFullYear()}`;
 }
 
+// Journée de Solidarité = Lundi de Pentecôte (Pâques + 50 jours)
+function getJourSolidarite(yr){
+  // Utilise directement le calcul de Pâques + 50 jours
+  const pad=n=>String(n).padStart(2,'0');
+  const a=yr%19,b=Math.floor(yr/100),c=yr%100,dd=Math.floor(b/4),e_=b%4;
+  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-dd-g+15)%30;
+  const i=Math.floor(c/4),k=c%4,l=(32+2*e_+2*i-h-k)%7,mo=Math.floor((a+11*h+22*l)/451);
+  const mth=Math.floor((h+l-7*mo+114)/31), day=((h+l-7*mo+114)%31)+1;
+  const dt=new Date(yr,mth-1,day+50);
+  return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());
+}
+function isJourSolidarite(ds){ return getJourSolidarite(parseInt(ds.substring(0,4)))===ds; }
+
 // Jours fériés France
 function feries(yr){
   const pad=n=>String(n).padStart(2,'0');
@@ -1690,8 +1703,10 @@ function renderWork(){
     const tot=e.netMin;
     const tCell=tw>0?'<span style="color:var(--acc)">+'+hhmm(tw)+'<br><small style="color:var(--tx3)">'+e.travelType+'</small></span>':'<span style="color:var(--tx3)">—</span>';
     const hs=tot>DAY9?'<span class="badge b-red" style="margin-left:4px">HS</span>':'';
-    return`<tr>
-      <td>${dStr(e.date)}</td>
+    const isSolidarite=isJourSolidarite(e.date);
+    const rowStyle=isSolidarite?'background:rgba(240,192,64,.08);border-left:3px solid var(--acc);':'';
+    return`<tr style="${rowStyle}">
+      <td>${dStr(e.date)}${isSolidarite?'<br><span style="font-size:9px;color:var(--acc);font-weight:700;">⚡ Journée Solidarité</span>':''}</td>
       <td style="color:var(--grn)">${e.start}</td>
       <td style="color:var(--red)">${e.end}</td>
       <td style="color:var(--tx3)">${e.break}min</td>
@@ -1893,11 +1908,16 @@ function calcOT(list){
 // Utilisée par le Bilan, l'Historique et les Congés
 function calcCagnotte(){
   // HS semaine par semaine — TOUTES les entrées CDI
+  // La Journée de Solidarité (lundi Pentecôte) est exclue des HS
   const wks={};
   entries.filter(e=>e.type==='work').forEach(e=>{
     const w=isoWeek(e.date);
-    if(!wks[w]) wks[w]={work:0, ferie:0};
-    wks[w].work+=e.netMin;
+    if(!wks[w]) wks[w]={work:0, ferie:0, solidarite:0};
+    if(isJourSolidarite(e.date)){
+      wks[w].solidarite+=e.netMin; // ne compte pas dans les HS
+    } else {
+      wks[w].work+=e.netMin;
+    }
   });
 
   // Ajouter les jours fériés posés dans la même semaine
@@ -1935,15 +1955,29 @@ function calcCagnotte(){
   const s2Maj=Math.round(s2Real*0.5);
   const hsMajBrut=s1Real+s1Maj+s2Real+s2Maj;
 
-  // Repos compensateur posés — TOUS (toutes années)
+  // Déduction automatique Journée de Solidarité (7h par an depuis l'embauche)
+  // Le lundi de Pentecôte est chômé mais 7h sont prélevées sur la cagnotte HS
+  const startYear=2026; // année d'embauche
+  const currentYear=new Date().getFullYear();
+  let solidariteDeduction=0;
+  for(let yr=startYear; yr<=currentYear; yr++){
+    const jourSol=getJourSolidarite(yr);
+    // Ne déduire que si la date est passée
+    if(jourSol<=fmtD(new Date())){
+      solidariteDeduction+=DAY7; // 7h = 420 min
+    }
+  }
+
+  // Repos compensateur posés + Journée de Solidarité
   const rcN=entries.filter(e=>e.type==='leave'&&e.leaveType==='repos').length;
   const reposMin=rcN*DAY7;
+  const totalDeduction=reposMin+solidariteDeduction;
 
   // Cagnotte nette
-  const cagnotte=Math.max(0,hsMajBrut-reposMin);
+  const cagnotte=Math.max(0,hsMajBrut-totalDeduction);
   const joursDispos=Math.floor(cagnotte/DAY7);
 
-  return{s1:s1Real,s2:s2Real,s1Maj,s2Maj,hsMajBrut,rcN,reposMin,cagnotte,joursDispos};
+  return{s1:s1Real,s2:s2Real,s1Maj,s2Maj,hsMajBrut,rcN,reposMin,solidariteDeduction,cagnotte,joursDispos};
 }
 
 // ════════════════════════════════════════════
@@ -1995,14 +2029,16 @@ function updateSummary(){
   document.getElementById('b-s2-h').textContent=hhmm(cag.s2);
   document.getElementById('b-s2-maj').textContent='+ '+hhmm(s2Maj);
   document.getElementById('b-s2-tot').textContent=hhmm(s2Tot);
-  document.getElementById('b-rc').textContent=rcNCag+' j = '+hhmm(rcNCag*DAY7)+' déduit';
+  document.getElementById('b-rc').textContent=rcNCag+' j = '+hhmm(rcNCag*DAY7)+' déduit'
+    +(cag.solidariteDeduction>0?' + Solidarité: −'+hhmm(cag.solidariteDeduction):'');
   document.getElementById('b-sn').textContent=hhmm(hsNMaj);
 
   // Cagnotte card
   document.getElementById('s-sh').textContent=hhmm(hsNMaj);
   document.getElementById('s-sh-sub').textContent=hsNMaj>0?'à récupérer':'aucune disponible';
   document.getElementById('cag-maj').textContent=hhmm(hsMajTotal);
-  document.getElementById('cag-repos').textContent=hhmm(rcNCag*DAY7);
+  document.getElementById('cag-repos').textContent=hhmm(rcNCag*DAY7)
+    +(cag.solidariteDeduction>0?' + '+hhmm(cag.solidariteDeduction)+' (solidarité)':'');
   document.getElementById('cag-net').textContent=hhmm(hsNMaj);
   const joursDispos=Math.floor(hsNMaj/DAY7);
 
@@ -2502,6 +2538,7 @@ function genReport(){
     L.push(SEP);
     L.push('  HS majorées brutes : '+hhmm(cag.hsMajBrut));
     L.push('  Repos posés (total): − '+hhmm(rcListAll.length*DAY7)+' ('+rcListAll.length+' j × 7h)');
+    if(cag.solidariteDeduction>0) L.push('  ⚡ Solidarité       : − '+hhmm(cag.solidariteDeduction)+' (Journée de Solidarité prélevée)');
     L.push('  ─────────────────────────────────────');
     L.push('  SOLDE RESTANT      : '+hhmm(cag.cagnotte));
     L.push('  Soit               : '+cag.joursDispos+' jour(s) entier(s) disponible(s)');
@@ -2590,7 +2627,8 @@ function genReport(){
         const tw=e.travelMin||0;
         const tj=tw>0?' [+'+hhmm(tw)+' trajet '+e.travelType+']':'';
         const note=e.note?' ('+e.note+')':'';
-        L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(e.netMin).padEnd(10)+(e.site||'—')+tj+note);
+        const solidarite=isJourSolidarite(e.date)?' ⚡[Solidarité]':'';
+        L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(e.netMin).padEnd(10)+(e.site||'—')+tj+note+solidarite);
       });
       // Mentionner les jours hors période qui ont été pris en compte pour les HS
       if(joursHorsPeriode.length){

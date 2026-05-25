@@ -602,21 +602,29 @@ select option{background:var(--sur2);}
   <!-- Upload -->
   <div class="card">
     <h3><span class="dot" style="background:var(--pur)"></span>📑 Fiche de paie</h3>
-    <p style="font-size:11px;color:var(--tx3);margin-bottom:12px;">
-      Uploadez votre fiche de paie PDF — l'application extrait automatiquement les données et les compare avec ChronoWork.
-    </p>
-    <div style="border:2px dashed var(--brd);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:12px;" 
-         onclick="document.getElementById('paie-file-input').click()"
-         ondragover="event.preventDefault();this.style.borderColor='var(--pur)'"
-         ondragleave="this.style.borderColor='var(--brd)'"
-         ondrop="event.preventDefault();this.style.borderColor='var(--brd)';handlePaieFile(event.dataTransfer.files[0])">
-      <div style="font-size:32px;margin-bottom:8px;">📄</div>
-      <div style="font-size:12px;font-weight:600;color:var(--tx2);">Glissez votre fiche de paie ici</div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:4px;">ou cliquez pour sélectionner un fichier PDF</div>
+
+    <!-- Méthode 1 : Import JSON (recommandé) -->
+    <div style="background:rgba(74,240,176,.06);border:1px solid rgba(74,240,176,.2);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--grn);margin-bottom:6px;">✅ Méthode recommandée — Import JSON</div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:8px;">
+        Envoyez votre fiche PDF à Claude dans cette conversation → Claude extrait les données → copiez le JSON → importez ici.
+      </div>
+      <div style="border:2px dashed var(--brd);border-radius:8px;padding:16px;text-align:center;cursor:pointer;" 
+           onclick="document.getElementById('paie-json-input').click()">
+        <div style="font-size:24px;">📋</div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);">Importer un fichier JSON</div>
+        <div style="font-size:10px;color:var(--tx3);">Cliquez pour sélectionner</div>
+      </div>
+      <input type="file" id="paie-json-input" accept=".json" style="display:none" onchange="handlePaieJSON(this.files[0])">
+      <div style="margin-top:8px;">
+        <textarea id="paie-json-paste" placeholder='Ou collez directement le JSON ici : {"periode":"Janvier 2026","mois_num":1,...}' 
+          style="width:100%;height:60px;font-size:10px;font-family:monospace;background:var(--sur2);border:1px solid var(--brd);border-radius:6px;padding:6px;color:var(--tx);resize:none;"></textarea>
+        <button class="btn bw" onclick="handlePaieJSONPaste()" style="width:100%;margin-top:6px;font-size:11px;">⚡ Importer le JSON collé</button>
+      </div>
     </div>
-    <input type="file" id="paie-file-input" accept=".pdf" style="display:none" onchange="handlePaieFile(this.files[0])">
+
     <div id="paie-loading" style="display:none;text-align:center;padding:16px;color:var(--tx3);font-size:12px;">
-      ⏳ Extraction en cours...
+      ⏳ Import en cours...
     </div>
   </div>
 
@@ -2076,53 +2084,47 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════
-// ════════════════════════════════════════════
-//  FICHE DE PAIE
+//  FICHE DE PAIE — Import JSON
 // ════════════════════════════════════════════
 let paieHistory=JSON.parse(localStorage.getItem('cw4_paie')||'[]');
 function savePaieHistory(){ localStorage.setItem('cw4_paie',JSON.stringify(paieHistory)); }
 
-function handlePaieFile(file){
-  if(!file||file.type!=='application/pdf'){ toast('Sélectionnez un fichier PDF.','err'); return; }
-  document.getElementById('paie-loading').style.display='block';
-  document.getElementById('paie-result').style.display='none';
+function handlePaieJSON(file){
+  if(!file) return;
   const reader=new FileReader();
-  reader.onload=async e=>{
+  reader.onload=e=>{
     try{
-      const base64=e.target.result.split(',')[1];
-      const paie=await extractPaieViaAPI(base64);
-      displayPaie(paie);
-      const existing=paieHistory.findIndex(p=>p.periode===paie.periode);
-      if(existing>=0) paieHistory[existing]=paie;
-      else paieHistory.push(paie);
-      savePaieHistory();
-      renderPaieHistorique();
-    }catch(err){
-      toast('Erreur extraction : '+err.message,'err');
-    } finally {
-      document.getElementById('paie-loading').style.display='none';
-    }
+      const data=JSON.parse(e.target.result);
+      importPaieData(Array.isArray(data)?data:[data]);
+    }catch(err){ toast('Fichier JSON invalide : '+err.message,'err'); }
   };
-  reader.readAsDataURL(file);
+  reader.readAsText(file);
 }
 
-async function extractPaieViaAPI(base64){
-  const resp=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
-      max_tokens:1000,
-      messages:[{role:'user',content:[
-        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-        {type:'text',text:'Extrait les données de cette fiche de paie. Réponds UNIQUEMENT en JSON valide sans markdown ni backticks :\n{"periode":"Mois YYYY","mois_num":1,"annee":2026,"heures_mensuel":151.67,"heures_supp_25":0,"heures_supp_50":0,"net_avant_impots":3569.58,"net_paye":3125.62,"impots_pas":443.96,"cumul_impots":443.96,"frais_pro":0,"titres_resto":0,"cp_acquis_mois":2.25,"cp_acquis_cumul":2.25,"cp_pris":0,"cp_solde":2.25}\nnet_avant_impots = "Net à payer avant impôt sur le revenu". Si absent mets 0.'}
-      ]}]
-    })
-  });
-  const data=await resp.json();
-  const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-  return JSON.parse(text.replace(/```json|```/g,'').trim());
+function handlePaieJSONPaste(){
+  const txt=document.getElementById('paie-json-paste').value.trim();
+  if(!txt){ toast('Collez un JSON valide.','err'); return; }
+  try{
+    const data=JSON.parse(txt);
+    importPaieData(Array.isArray(data)?data:[data]);
+    document.getElementById('paie-json-paste').value='';
+  }catch(err){ toast('JSON invalide : '+err.message,'err'); }
 }
+
+function importPaieData(fiches){
+  fiches.forEach(paie=>{
+    if(!paie.periode||!paie.mois_num){ return; }
+    const existing=paieHistory.findIndex(p=>p.periode===paie.periode);
+    if(existing>=0) paieHistory[existing]=paie;
+    else paieHistory.push(paie);
+  });
+  savePaieHistory();
+  renderPaieHistorique();
+  const last=fiches[fiches.length-1];
+  if(last) displayPaie(last);
+  toast('✓ '+fiches.length+' fiche(s) importée(s)');
+}
+
 
 function displayPaie(paie){
   document.getElementById('paie-result').style.display='block';

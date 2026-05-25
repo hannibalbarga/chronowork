@@ -2012,45 +2012,60 @@ function calcOT(list){
 // Utilisée par le Bilan, l'Historique et les Congés
 function calcCagnotte(){
   // HS semaine par semaine — TOUTES les entrées CDI
-  // La Journée de Solidarité (lundi Pentecôte) est exclue des HS
+  // Règle légale : les jours fériés CHÔMÉS sont assimilés à du temps de travail effectif
+  // pour le calcul du SEUIL de déclenchement des HS (35h)
+  // Mais ils ne génèrent pas eux-mêmes des HS — seules les heures réellement travaillées comptent
+
   const wks={};
+
+  // 1. Heures réellement travaillées (CDI)
   entries.filter(e=>e.type==='work').forEach(e=>{
     const w=isoWeek(e.date);
-    if(!wks[w]) wks[w]={work:0, ferie:0, solidarite:0};
+    if(!wks[w]) wks[w]={work:0, ferieChome:0, solidarite:0};
     if(isJourSolidarite(e.date)){
-      wks[w].solidarite+=e.netMin; // ne compte pas dans les HS
+      wks[w].solidarite+=e.netMin; // journée solidarité : ne compte pas dans HS
     } else {
       wks[w].work+=e.netMin;
     }
   });
 
-  // Ajouter les jours fériés posés dans la même semaine
-  // Un férié = 7h comptabilisés dans la semaine → réduit les fausses HS
-  entries.filter(e=>e.type==='leave'&&e.leaveType==='ferie').forEach(e=>{
-    const w=isoWeek(e.date);
-    if(!wks[w]) wks[w]={work:0, ferie:0};
-    wks[w].ferie+=DAY7;
+  // 2. Jours fériés chômés de la semaine (non travaillés)
+  // On cherche les fériés qui tombent en semaine CDI (lun-jeu) et qui ne sont pas travaillés
+  const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
+  const leaveTypes=new Set(entries.filter(e=>e.type==='leave').map(e=>e.date));
+
+  // Pour chaque semaine qui a des heures travaillées, on cherche les fériés chômés
+  const weeksWithWork=new Set(Object.keys(wks));
+  weeksWithWork.forEach(w=>{
+    // Trouver les jours de cette semaine ISO
+    const [yr,wn]=w.split('-W').map(Number);
+    // Premier jour de la semaine ISO (lundi)
+    const jan4=new Date(yr,0,4);
+    const monday=new Date(jan4);
+    monday.setDate(jan4.getDate()-(jan4.getDay()||7)+1+(wn-1)*7);
+    // Parcourir lundi→vendredi de cette semaine
+    for(let d=0;d<5;d++){
+      const dt=new Date(monday);
+      dt.setDate(monday.getDate()+d);
+      const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+      // Si ce jour est férié ET non travaillé ET non journée solidarité
+      if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)){
+        if(!wks[w]) wks[w]={work:0,ferieChome:0,solidarite:0};
+        if(!wks[w].ferieChome) wks[w].ferieChome=0;
+        wks[w].ferieChome+=DAY7; // 7h assimilées
+      }
+    }
   });
 
-  let s1=0, s2=0;
-  Object.values(wks).forEach(({work, ferie})=>{
-    // Total semaine = heures travaillées + fériés (semaine "remplie")
-    const tot=work+ferie;
-    s1+=Math.max(0,Math.min(tot,W43)-W35);
-    s2+=Math.max(0,tot-W43);
-  });
-
-  // Mais on ne compte les HS QUE sur les heures réellement travaillées
-  // Un férié ne génère pas de HS — on recalcule sans les fériés
-  // pour les HS réelles, mais avec fériés pour le SEUIL 35h
+  // 3. Calcul des HS réelles semaine par semaine
+  // Seuil effectif = 35h - fériés chômés assimilés
+  // HS réelles = heures CDI au-delà du seuil effectif
   let s1Real=0, s2Real=0;
-  Object.values(wks).forEach(({work, ferie})=>{
-    const tot=work+ferie; // total avec fériés pour définir le seuil
-    const hs=Math.max(0,tot-W35); // HS par rapport au seuil 35h
-    const hsReal=Math.max(0,hs-(ferie>0?ferie:0)); // ôter la part fériée des HS
-    const hsActual=Math.max(0,work-Math.max(0,W35-ferie)); // HS réelles = heures CDI au-delà de (35h - fériés)
-    const t1=Math.max(0,Math.min(hsActual,W43-W35));
-    const t2=Math.max(0,hsActual-(W43-W35));
+  Object.values(wks).forEach(({work=0, ferieChome=0})=>{
+    const seuilEffectif=Math.max(0, W35-ferieChome); // seuil réduit par les fériés
+    const hsReelles=Math.max(0, work-seuilEffectif);  // HS réelles sur heures travaillées
+    const t1=Math.max(0, Math.min(hsReelles, W43-W35)); // tranche +25%
+    const t2=Math.max(0, hsReelles-(W43-W35));            // tranche +50%
     s1Real+=t1;
     s2Real+=t2;
   });

@@ -157,6 +157,7 @@ select option{background:var(--sur2);}
   <button class="tab dashboard"     onclick="go('dashboard')">📊 Graphiques</button>
   <button class="tab history"       onclick="go('history')">📅 Historique</button>
   <button class="tab notif"         onclick="go('notif')">🔔 Rappels</button>
+  <button class="tab paie"          onclick="go('paie')">📑 Fiche de paie</button>
 </div>
 
 <!-- ══════════ PANEL CDI ══════════ -->
@@ -595,7 +596,98 @@ select option{background:var(--sur2);}
   </div>
 </div>
 
-<!-- ======= PANEL GRAPHIQUES ======= -->
+<!-- ======= PANEL FICHE DE PAIE ======= -->
+<div class="panel" id="panel-paie">
+
+  <!-- Upload -->
+  <div class="card">
+    <h3><span class="dot" style="background:var(--pur)"></span>📑 Fiche de paie</h3>
+    <p style="font-size:11px;color:var(--tx3);margin-bottom:12px;">
+      Uploadez votre fiche de paie PDF — l'application extrait automatiquement les données et les compare avec ChronoWork.
+    </p>
+    <div style="border:2px dashed var(--brd);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:12px;" 
+         onclick="document.getElementById('paie-file-input').click()"
+         ondragover="event.preventDefault();this.style.borderColor='var(--pur)'"
+         ondragleave="this.style.borderColor='var(--brd)'"
+         ondrop="event.preventDefault();this.style.borderColor='var(--brd)';handlePaieFile(event.dataTransfer.files[0])">
+      <div style="font-size:32px;margin-bottom:8px;">📄</div>
+      <div style="font-size:12px;font-weight:600;color:var(--tx2);">Glissez votre fiche de paie ici</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:4px;">ou cliquez pour sélectionner un fichier PDF</div>
+    </div>
+    <input type="file" id="paie-file-input" accept=".pdf" style="display:none" onchange="handlePaieFile(this.files[0])">
+    <div id="paie-loading" style="display:none;text-align:center;padding:16px;color:var(--tx3);font-size:12px;">
+      ⏳ Extraction en cours...
+    </div>
+  </div>
+
+  <!-- Résultat extraction -->
+  <div id="paie-result" style="display:none;">
+
+    <!-- En-tête fiche -->
+    <div class="card" id="paie-header-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;" id="paie-titre">—</div>
+          <div style="font-size:11px;color:var(--tx3);" id="paie-societe">—</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:20px;font-weight:800;color:var(--grn);" id="paie-net">—</div>
+          <div style="font-size:10px;color:var(--tx3);">Net payé</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 cartes résumé -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
+      <div class="solde-box">
+        <div class="sl">⏱ Heures déclarées</div>
+        <div class="sv" id="paie-heures" style="color:var(--blu)">—</div>
+        <div style="font-size:9px;color:var(--tx3);" id="paie-heures-sub">—</div>
+      </div>
+      <div class="solde-box">
+        <div class="sl">💰 Net avant impôts</div>
+        <div class="sv" id="paie-brut" style="color:var(--tx)">—</div>
+      </div>
+      <div class="solde-box" style="background:rgba(240,64,128,.06);border-color:rgba(240,64,128,.2);">
+        <div class="sl">🏛 Impôts prélevés (PAS)</div>
+        <div class="sv" id="paie-impots" style="color:var(--red)">—</div>
+        <div style="font-size:9px;color:var(--tx3);" id="paie-impots-cumul">—</div>
+      </div>
+      <div class="solde-box" style="background:rgba(74,240,176,.06);border-color:rgba(74,240,176,.2);">
+        <div class="sl">📋 Frais professionnels</div>
+        <div class="sv" id="paie-frais" style="color:var(--grn)">—</div>
+        <div style="font-size:9px;color:var(--tx3);" id="paie-resto">—</div>
+      </div>
+    </div>
+
+    <!-- Comparaison avec ChronoWork -->
+    <div class="card">
+      <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">🔍 Comparaison avec ChronoWork</h4>
+      <div id="paie-comparaison"></div>
+    </div>
+
+    <!-- Compteur annuel heures -->
+    <div class="card">
+      <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📊 Compteur annuel d'heures</h4>
+      <div id="paie-compteur-annuel"></div>
+    </div>
+
+    <!-- Cumuls annuels -->
+    <div class="card">
+      <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📈 Cumuls annuels</h4>
+      <div id="paie-cumuls"></div>
+    </div>
+
+  </div>
+
+  <!-- Historique des fiches -->
+  <div class="card" id="paie-historique-card" style="display:none;">
+    <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">📁 Fiches enregistrées</h4>
+    <div id="paie-historique-list"></div>
+    <button class="btn bd" onclick="clearPaieHistory()" style="font-size:10px;margin-top:8px;">🗑 Effacer l'historique</button>
+  </div>
+
+</div>
 <div class="panel" id="panel-dashboard">
   <div class="chart-wrap"><h4>📊 Heures CDI/CDD par mois</h4><div class="bar-chart" id="ch-work"></div></div>
   <div class="chart-wrap"><h4>⚡ Heures supplémentaires par mois</h4><div class="bar-chart" id="ch-hs"></div></div>
@@ -1018,6 +1110,7 @@ function go(name){
   if(name==='dashboard') renderDashboard();
   if(name==='history') renderHistory();
   if(name==='notif') renderNotifList();
+  if(name==='paie') renderPaieHistorique();
   if(name==='report'){
     document.getElementById('report-out').style.display='none';
     ['r-sel','r-mail','r-dl','r-hint'].forEach(x=>{ const el=document.getElementById(x); if(el) el.style.display='none'; });
@@ -1983,6 +2076,187 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════
+// ════════════════════════════════════════════
+//  FICHE DE PAIE
+// ════════════════════════════════════════════
+let paieHistory=JSON.parse(localStorage.getItem('cw4_paie')||'[]');
+function savePaieHistory(){ localStorage.setItem('cw4_paie',JSON.stringify(paieHistory)); }
+
+function handlePaieFile(file){
+  if(!file||file.type!=='application/pdf'){ toast('Sélectionnez un fichier PDF.','err'); return; }
+  document.getElementById('paie-loading').style.display='block';
+  document.getElementById('paie-result').style.display='none';
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const base64=e.target.result.split(',')[1];
+      const paie=await extractPaieViaAPI(base64);
+      displayPaie(paie);
+      const existing=paieHistory.findIndex(p=>p.periode===paie.periode);
+      if(existing>=0) paieHistory[existing]=paie;
+      else paieHistory.push(paie);
+      savePaieHistory();
+      renderPaieHistorique();
+    }catch(err){
+      toast('Erreur extraction : '+err.message,'err');
+    } finally {
+      document.getElementById('paie-loading').style.display='none';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function extractPaieViaAPI(base64){
+  const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:'Extrait les données de cette fiche de paie. Réponds UNIQUEMENT en JSON valide sans markdown ni backticks :\n{"periode":"Mois YYYY","mois_num":1,"annee":2026,"heures_mensuel":151.67,"heures_supp_25":0,"heures_supp_50":0,"net_avant_impots":3569.58,"net_paye":3125.62,"impots_pas":443.96,"cumul_impots":443.96,"frais_pro":0,"titres_resto":0,"cp_acquis_mois":2.25,"cp_acquis_cumul":2.25,"cp_pris":0,"cp_solde":2.25}\nnet_avant_impots = "Net à payer avant impôt sur le revenu". Si absent mets 0.'}
+      ]}]
+    })
+  });
+  const data=await resp.json();
+  const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
+  return JSON.parse(text.replace(/```json|```/g,'').trim());
+}
+
+function displayPaie(paie){
+  document.getElementById('paie-result').style.display='block';
+  document.getElementById('paie-titre').textContent='Bulletin de salaire — '+paie.periode;
+  document.getElementById('paie-net').textContent=(paie.net_paye||0).toFixed(2)+' €';
+  document.getElementById('paie-heures').textContent=(paie.heures_mensuel||0)+'h';
+  document.getElementById('paie-brut').textContent=(paie.net_avant_impots||0).toFixed(2)+' €';
+  document.getElementById('paie-impots').textContent='−'+(paie.impots_pas||0).toFixed(2)+' €';
+  document.getElementById('paie-impots-cumul').textContent='Cumul annuel : '+(paie.cumul_impots||0).toFixed(2)+' €';
+  document.getElementById('paie-frais').textContent=(paie.frais_pro||0)>0?(paie.frais_pro).toFixed(2)+' €':'Aucun';
+  document.getElementById('paie-resto').textContent=(paie.titres_resto||0)>0?paie.titres_resto+' titres-restaurant':'';
+  const hsTotal=(paie.heures_supp_25||0)+(paie.heures_supp_50||0);
+  document.getElementById('paie-heures-sub').textContent=hsTotal>0?'HS +25%: '+(paie.heures_supp_25||0)+'h · HS +50%: '+(paie.heures_supp_50||0)+'h':'Pas de HS déclarées';
+  renderComparaison(paie);
+  renderCompteurAnnuel(paie);
+  renderCumuls(paie);
+}
+
+function renderComparaison(paie){
+  const el=document.getElementById('paie-comparaison');
+  const ym=paie.annee+'-'+String(paie.mois_num).padStart(2,'0');
+  const wListMois=entries.filter(e=>e.type==='work'&&e.date.startsWith(ym));
+  const heuresCW=wListMois.reduce((a,e)=>a+e.netMin,0)/60;
+  const joursCW=wListMois.filter(e=>!isJourSolidarite(e.date)).length;
+  const wkMap={};
+  wListMois.forEach(e=>{ if(!isJourSolidarite(e.date)){ const w=isoWeek(e.date); if(!wkMap[w])wkMap[w]=0; wkMap[w]+=e.netMin; }});
+  let hs25=0,hs50=0;
+  Object.values(wkMap).forEach(t=>{ hs25+=Math.max(0,Math.min(t,W43)-W35); hs50+=Math.max(0,t-W43); });
+  const paieResto=paie.titres_resto||0;
+  const restoOk=paieResto===joursCW||paieResto===0;
+  const hsPaieDecl=(paie.heures_supp_25||0)+(paie.heures_supp_50||0);
+  const rows=[
+    {label:'Heures travaillées',fiche:(paie.heures_mensuel||0)+'h',cw:heuresCW.toFixed(2)+'h',ok:Math.abs((paie.heures_mensuel||0)-heuresCW)<0.5},
+    {label:'Titres-restaurant',fiche:paieResto>0?paieResto+' titres':'non déclarés',cw:joursCW+' jours CDI',ok:restoOk},
+    {label:'CP acquis ce mois',fiche:(paie.cp_acquis_mois||0)+' j',cw:'2.08 j',ok:Math.abs((paie.cp_acquis_mois||0)-2.08)<0.2},
+  ];
+  let html='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="color:var(--tx3);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:4px 6px;">Élément</th><th style="padding:4px 6px;">Fiche</th><th style="padding:4px 6px;">ChronoWork</th><th style="padding:4px 6px;">OK?</th></tr></thead><tbody>';
+  rows.forEach(r=>{ html+=`<tr style="border-top:1px solid var(--brd);"><td style="padding:6px;">${r.label}</td><td style="padding:6px;text-align:center;font-family:'DM Mono',monospace;">${r.fiche}</td><td style="padding:6px;text-align:center;font-family:'DM Mono',monospace;">${r.cw}</td><td style="padding:6px;text-align:center;">${r.ok?'<span style="color:var(--grn)">✅</span>':'<span style="color:var(--red)">⚠️</span>'}</td></tr>`; });
+  html+='</tbody></table>';
+  if(hsPaieDecl>0){
+    html+=`<div style="margin-top:10px;background:rgba(240,64,128,.1);border:1px solid var(--red);border-radius:8px;padding:10px;font-size:11px;"><strong style="color:var(--red);">❌ ALERTE — HS PAYÉES</strong><br>La fiche déclare ${hsPaieDecl}h de HS payées au lieu d'être récupérées.<br><strong>À vérifier avec votre employeur.</strong></div>`;
+  } else if(hs25+hs50>0){
+    html+=`<div style="margin-top:10px;background:rgba(74,240,176,.08);border:1px solid var(--grn);border-radius:8px;padding:10px;font-size:11px;"><span style="color:var(--grn);">✅ HS correctement non payées</span> — ${(hs25/60).toFixed(1)}h (+25%) + ${(hs50/60).toFixed(1)}h (+50%) à récupérer.</div>`;
+  }
+  el.innerHTML=html;
+}
+
+function renderCompteurAnnuel(paie){
+  const el=document.getElementById('paie-compteur-annuel');
+  const annee=paie.annee||new Date().getFullYear();
+  const embauche=new Date('2026-01-05');
+  const finAnnee=new Date(annee,11,31);
+  const start=embauche.getFullYear()===annee?embauche:new Date(annee,0,1);
+  const ratioAnnee=Math.min(1,(finAnnee-start)/(1000*60*60*24*365));
+  // VOL_LEGAL = 1607h/an (base légale France)
+  // VOL_CW = ton calcul : 52sem×35h − 35j cal congés (=25j ouvrables×7h) − fériés semaine
+  // 1820h − 175h congés − 49h fériés = 1596h
+  const VOL_LEGAL=Math.round(1607*ratioAnnee);
+  const VOL_CW=Math.round(1596*ratioAnnee);
+  const ym=annee+'-'+String(paie.mois_num).padStart(2,'0');
+  const heuresCumulCW=entries.filter(e=>e.type==='work'&&e.date.startsWith(String(annee))&&e.date<=ym+'-31').reduce((a,e)=>a+e.netMin,0)/60;
+  const fichesCumul=paieHistory.filter(p=>p.annee===annee&&p.mois_num<=paie.mois_num);
+  const heuresCumulFiche=fichesCumul.reduce((a,p)=>a+(p.heures_mensuel||0),0);
+  const resteLegal=Math.max(0,VOL_LEGAL-heuresCumulFiche);
+  const resteCW=Math.max(0,VOL_CW-heuresCumulCW);
+  const pctLegal=Math.min(100,(heuresCumulFiche/VOL_LEGAL)*100);
+  const pctCW=Math.min(100,(heuresCumulCW/VOL_CW)*100);
+  el.innerHTML=`
+  <div style="font-size:10px;color:var(--tx3);margin-bottom:10px;">Prorata depuis embauche 05/01/${annee} — ${Math.round(ratioAnnee*100)}% de l'année</div>
+  <div style="margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
+      <span style="color:var(--acc);">🟠 Employeur (${VOL_LEGAL}h)</span>
+      <span style="font-weight:700;">${heuresCumulFiche.toFixed(1)}h travaillées</span>
+    </div>
+    <div style="background:var(--sur2);border-radius:4px;height:12px;overflow:hidden;">
+      <div style="height:100%;width:${pctLegal}%;background:var(--acc);border-radius:4px;"></div>
+    </div>
+    <div style="font-size:10px;color:var(--tx3);margin-top:3px;">Reste : <strong style="color:${resteLegal<100?'var(--red)':'var(--acc)'}">${resteLegal.toFixed(1)}h</strong>${resteLegal<=0?' ⚡ Tout travail = HS en ta faveur':''}</div>
+  </div>
+  <div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
+      <span style="color:var(--blu);">🔵 Ton calcul (${VOL_CW}h)</span>
+      <span style="font-weight:700;">${heuresCumulCW.toFixed(1)}h travaillées</span>
+    </div>
+    <div style="background:var(--sur2);border-radius:4px;height:12px;overflow:hidden;">
+      <div style="height:100%;width:${pctCW}%;background:var(--blu);border-radius:4px;"></div>
+    </div>
+    <div style="font-size:10px;color:var(--tx3);margin-top:3px;">Reste : <strong style="color:${resteCW<100?'var(--red)':'var(--blu)'}">${resteCW.toFixed(1)}h</strong>${resteCW<=0?' ⚡ Tout travail = HS en ta faveur':''}</div>
+  </div>
+  <div style="font-size:10px;color:var(--tx3);background:var(--sur2);border-radius:6px;padding:6px 10px;margin-top:10px;">Écart entre les 2 systèmes : <strong>${Math.abs(resteLegal-resteCW).toFixed(1)}h</strong> (${VOL_LEGAL-VOL_CW}h de différence annuelle proratée)</div>`;
+}
+
+function renderCumuls(paie){
+  const el=document.getElementById('paie-cumuls');
+  const fiches=paieHistory.filter(p=>p.annee===paie.annee).sort((a,b)=>a.mois_num-b.mois_num);
+  if(!fiches.length){ el.innerHTML='<p style="color:var(--tx3);font-size:11px;">Importez plusieurs fiches pour voir les cumuls annuels.</p>'; return; }
+  const totNet=fiches.reduce((a,p)=>a+(p.net_paye||0),0);
+  const totImpots=fiches.reduce((a,p)=>a+(p.impots_pas||0),0);
+  const totFrais=fiches.reduce((a,p)=>a+(p.frais_pro||0),0);
+  const totHeures=fiches.reduce((a,p)=>a+(p.heures_mensuel||0),0);
+  const totResto=fiches.reduce((a,p)=>a+(p.titres_resto||0),0);
+  let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div style="background:rgba(74,240,176,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">💰 Paie nette cumulée</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totNet.toFixed(2)} €</div></div>
+    <div style="background:rgba(240,64,128,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">🏛 Impôts cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--red);">${totImpots.toFixed(2)} €</div></div>
+    <div style="background:rgba(74,240,176,.04);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">📋 Frais pro cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totFrais.toFixed(2)} €</div></div>
+    <div style="background:var(--sur2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">⏱ Heures cumulées</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--blu);">${totHeures.toFixed(1)} h</div></div>
+  </div>`;
+  if(totResto>0) html+=`<div style="font-size:11px;color:var(--tx2);text-align:center;margin-bottom:10px;">🍽 ${totResto} titres-restaurant cumulés</div>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr style="color:var(--tx3);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:3px 4px;">Mois</th><th style="padding:3px 4px;">Heures</th><th style="padding:3px 4px;">Net</th><th style="padding:3px 4px;">Impôts</th><th style="padding:3px 4px;">Frais</th></tr></thead><tbody>`;
+  fiches.forEach(p=>{ html+=`<tr style="border-top:1px solid var(--brd);"><td style="padding:4px;">${p.periode}</td><td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${(p.heures_mensuel||0)}h</td><td style="padding:4px;text-align:center;color:var(--grn);font-family:'DM Mono',monospace;">${(p.net_paye||0).toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);font-family:'DM Mono',monospace;">${(p.impots_pas||0).toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--grn);font-family:'DM Mono',monospace;">${(p.frais_pro||0)>0?(p.frais_pro).toFixed(2)+'€':'—'}</td></tr>`; });
+  html+=`<tr style="border-top:2px solid var(--brd);font-weight:700;"><td style="padding:4px;">TOTAL</td><td style="padding:4px;text-align:center;color:var(--blu);">${totHeures.toFixed(1)}h</td><td style="padding:4px;text-align:center;color:var(--grn);">${totNet.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);">${totImpots.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--grn);">${totFrais.toFixed(2)}€</td></tr></tbody></table>`;
+  el.innerHTML=html;
+}
+
+function renderPaieHistorique(){
+  const el=document.getElementById('paie-historique-list');
+  const card=document.getElementById('paie-historique-card');
+  if(!paieHistory.length){ card.style.display='none'; return; }
+  card.style.display='block';
+  el.innerHTML=paieHistory.sort((a,b)=>a.annee!==b.annee?a.annee-b.annee:a.mois_num-b.mois_num).map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--brd);border-radius:6px;margin-bottom:6px;cursor:pointer;" onclick="displayPaie(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+      <span style="font-size:11px;font-weight:600;">${p.periode}</span>
+      <span style="font-size:11px;color:var(--grn);">${(p.net_paye||0).toFixed(2)} €</span>
+      <span style="font-size:10px;color:var(--tx3);">${(p.heures_mensuel||0)}h</span>
+    </div>`).join('');
+}
+
+function clearPaieHistory(){
+  if(!confirm('Effacer tout l\'historique des fiches de paie ?')) return;
+  paieHistory=[]; savePaieHistory(); renderPaieHistorique();
+  document.getElementById('paie-result').style.display='none';
+  toast('Historique effacé');
+}
+
 function updateSummary(){
   const wC=calcOT(entries.filter(e=>e.type==='work'));
   const iC=calcOT(entries.filter(e=>e.type==='interim'));

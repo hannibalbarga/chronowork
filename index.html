@@ -606,14 +606,14 @@ select option{background:var(--sur2);}
     <!-- Méthode 1 : Import JSON (recommandé) -->
     <div style="background:rgba(74,240,176,.06);border:1px solid rgba(74,240,176,.2);border-radius:8px;padding:12px;margin-bottom:12px;">
       <div style="font-size:11px;font-weight:700;color:var(--grn);margin-bottom:6px;">✅ Méthode recommandée — Import JSON</div>
-      <div style="font-size:11px;color:var(--tx2);margin-bottom:8px;">
+      <div style="font-size:11px;color:rgba(255,255,255,.9);margin-bottom:8px;">
         Envoyez votre fiche PDF à Claude dans cette conversation → Claude extrait les données → copiez le JSON → importez ici.
       </div>
       <div style="border:2px dashed var(--brd);border-radius:8px;padding:16px;text-align:center;cursor:pointer;" 
            onclick="document.getElementById('paie-json-input').click()">
         <div style="font-size:24px;">📋</div>
-        <div style="font-size:11px;font-weight:600;color:var(--tx2);">Importer un fichier JSON</div>
-        <div style="font-size:10px;color:var(--tx3);">Cliquez pour sélectionner</div>
+        <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,.9);">Importer un fichier JSON</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.75);">Cliquez pour sélectionner</div>
       </div>
       <input type="file" id="paie-json-input" accept=".json" style="display:none" onchange="handlePaieJSON(this.files[0])">
       <div style="margin-top:8px;">
@@ -623,7 +623,7 @@ select option{background:var(--sur2);}
       </div>
     </div>
 
-    <div id="paie-loading" style="display:none;text-align:center;padding:16px;color:var(--tx3);font-size:12px;">
+    <div id="paie-loading" style="display:none;text-align:center;padding:16px;color:rgba(255,255,255,.75);font-size:12px;">
       ⏳ Import en cours...
     </div>
   </div>
@@ -636,7 +636,7 @@ select option{background:var(--sur2);}
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <div>
           <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;" id="paie-titre">—</div>
-          <div style="font-size:11px;color:var(--tx3);" id="paie-societe">—</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.75);" id="paie-societe">—</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:20px;font-weight:800;color:var(--grn);" id="paie-net">—</div>
@@ -650,7 +650,7 @@ select option{background:var(--sur2);}
       <div class="solde-box">
         <div class="sl" style="color:#fff;opacity:.9;">⏱ Heures déclarées</div>
         <div class="sv" id="paie-heures" style="color:var(--blu)">—</div>
-        <div style="font-size:9px;color:var(--tx2);" id="paie-heures-sub">—</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.9);" id="paie-heures-sub">—</div>
       </div>
       <div class="solde-box">
         <div class="sl" style="color:#fff;opacity:.9;">💰 Net avant impôts</div>
@@ -659,30 +659,30 @@ select option{background:var(--sur2);}
       <div class="solde-box" style="background:rgba(240,64,128,.06);border-color:rgba(240,64,128,.2);">
         <div class="sl" style="color:#fff;opacity:.9;">🏛 Impôts prélevés (PAS)</div>
         <div class="sv" id="paie-impots" style="color:var(--red)">—</div>
-        <div style="font-size:9px;color:var(--tx2);" id="paie-impots-cumul">—</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.9);" id="paie-impots-cumul">—</div>
       </div>
       <div class="solde-box" style="background:rgba(74,240,176,.06);border-color:rgba(74,240,176,.2);">
         <div class="sl" style="color:#fff;opacity:.9;">📋 Frais professionnels</div>
         <div class="sv" id="paie-frais" style="color:var(--grn)">—</div>
-        <div style="font-size:9px;color:var(--tx2);" id="paie-resto">—</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.9);" id="paie-resto">—</div>
       </div>
     </div>
 
     <!-- Comparaison avec ChronoWork -->
     <div class="card">
-      <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">🔍 Comparaison avec ChronoWork</h4>
+      <h4 style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">🔍 Comparaison avec ChronoWork</h4>
       <div id="paie-comparaison"></div>
     </div>
 
     <!-- Compteur annuel heures -->
     <div class="card">
-      <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📊 Compteur annuel d'heures</h4>
+      <h4 style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📊 Compteur annuel d'heures</h4>
       <div id="paie-compteur-annuel"></div>
     </div>
 
     <!-- Cumuls annuels -->
     <div class="card">
-      <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📈 Cumuls annuels</h4>
+      <h4 style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📈 Cumuls annuels</h4>
       <div id="paie-cumuls"></div>
     </div>
 
@@ -690,7 +690,7 @@ select option{background:var(--sur2);}
 
   <!-- Historique des fiches -->
   <div class="card" id="paie-historique-card" style="display:none;">
-    <h4 style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">📁 Fiches enregistrées</h4>
+    <h4 style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">📁 Fiches enregistrées</h4>
     <div id="paie-historique-list"></div>
     <button class="btn bd" onclick="clearPaieHistory()" style="font-size:10px;margin-top:8px;">🗑 Effacer l'historique</button>
   </div>
@@ -2184,7 +2184,7 @@ function renderComparaison(paie){
     {label:'Titres-restaurant',fiche:paieResto>0?paieResto+' titres':'non déclarés',cw:joursCW+' jours CDI',ok:restoOk},
     {label:'CP acquis ce mois',fiche:(paie.cp_acquis_mois||0)+' j',cw:'2.08 j',ok:Math.abs((paie.cp_acquis_mois||0)-2.08)<0.2},
   ];
-  let html='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="color:var(--tx3);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:4px 6px;">Élément</th><th style="padding:4px 6px;">Fiche</th><th style="padding:4px 6px;">ChronoWork</th><th style="padding:4px 6px;">OK?</th></tr></thead><tbody>';
+  let html='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="color:rgba(255,255,255,.75);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:4px 6px;">Élément</th><th style="padding:4px 6px;">Fiche</th><th style="padding:4px 6px;">ChronoWork</th><th style="padding:4px 6px;">OK?</th></tr></thead><tbody>';
   rows.forEach(r=>{ html+=`<tr style="border-top:1px solid var(--brd);"><td style="padding:6px;">${r.label}</td><td style="padding:6px;text-align:center;font-family:'DM Mono',monospace;">${r.fiche}</td><td style="padding:6px;text-align:center;font-family:'DM Mono',monospace;">${r.cw}</td><td style="padding:6px;text-align:center;">${r.ok?'<span style="color:var(--grn)">✅</span>':'<span style="color:var(--red)">⚠️</span>'}</td></tr>`; });
   html+='</tbody></table>';
   if(hsPaieDecl>0){
@@ -2216,7 +2216,7 @@ function renderCompteurAnnuel(paie){
   const pctLegal=Math.min(100,(heuresCumulFiche/VOL_LEGAL)*100);
   const pctCW=Math.min(100,(heuresCumulCW/VOL_CW)*100);
   el.innerHTML=`
-  <div style="font-size:10px;color:var(--tx3);margin-bottom:10px;">Prorata depuis embauche 05/01/${annee} — ${Math.round(ratioAnnee*100)}% de l'année</div>
+  <div style="font-size:10px;color:rgba(255,255,255,.75);margin-bottom:10px;">Prorata depuis embauche 05/01/${annee} — ${Math.round(ratioAnnee*100)}% de l'année</div>
   <div style="margin-bottom:14px;">
     <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
       <span style="color:var(--acc);">🟠 Employeur (${VOL_LEGAL}h)</span>
@@ -2225,7 +2225,7 @@ function renderCompteurAnnuel(paie){
     <div style="background:var(--sur2);border-radius:4px;height:12px;overflow:hidden;">
       <div style="height:100%;width:${pctLegal}%;background:var(--acc);border-radius:4px;"></div>
     </div>
-    <div style="font-size:10px;color:var(--tx3);margin-top:3px;">Reste : <strong style="color:${resteLegal<100?'var(--red)':'var(--acc)'}">${resteLegal.toFixed(1)}h</strong>${resteLegal<=0?' ⚡ Tout travail = HS en ta faveur':''}</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.75);margin-top:3px;">Reste : <strong style="color:${resteLegal<100?'var(--red)':'var(--acc)'}">${resteLegal.toFixed(1)}h</strong>${resteLegal<=0?' ⚡ Tout travail = HS en ta faveur':''}</div>
   </div>
   <div>
     <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
@@ -2235,28 +2235,28 @@ function renderCompteurAnnuel(paie){
     <div style="background:var(--sur2);border-radius:4px;height:12px;overflow:hidden;">
       <div style="height:100%;width:${pctCW}%;background:var(--blu);border-radius:4px;"></div>
     </div>
-    <div style="font-size:10px;color:var(--tx3);margin-top:3px;">Reste : <strong style="color:${resteCW<100?'var(--red)':'var(--blu)'}">${resteCW.toFixed(1)}h</strong>${resteCW<=0?' ⚡ Tout travail = HS en ta faveur':''}</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.75);margin-top:3px;">Reste : <strong style="color:${resteCW<100?'var(--red)':'var(--blu)'}">${resteCW.toFixed(1)}h</strong>${resteCW<=0?' ⚡ Tout travail = HS en ta faveur':''}</div>
   </div>
-  <div style="font-size:10px;color:var(--tx3);background:var(--sur2);border-radius:6px;padding:6px 10px;margin-top:10px;">Écart entre les 2 systèmes : <strong>${Math.abs(resteLegal-resteCW).toFixed(1)}h</strong> (${VOL_LEGAL-VOL_CW}h de différence annuelle proratée)</div>`;
+  <div style="font-size:10px;color:rgba(255,255,255,.75);background:var(--sur2);border-radius:6px;padding:6px 10px;margin-top:10px;">Écart entre les 2 systèmes : <strong>${Math.abs(resteLegal-resteCW).toFixed(1)}h</strong> (${VOL_LEGAL-VOL_CW}h de différence annuelle proratée)</div>`;
 }
 
 function renderCumuls(paie){
   const el=document.getElementById('paie-cumuls');
   const fiches=paieHistory.filter(p=>p.annee===paie.annee).sort((a,b)=>a.mois_num-b.mois_num);
-  if(!fiches.length){ el.innerHTML='<p style="color:var(--tx3);font-size:11px;">Importez plusieurs fiches pour voir les cumuls annuels.</p>'; return; }
+  if(!fiches.length){ el.innerHTML='<p style="color:rgba(255,255,255,.75);font-size:11px;">Importez plusieurs fiches pour voir les cumuls annuels.</p>'; return; }
   const totNet=fiches.reduce((a,p)=>a+((p.net_paye||0)-(p.frais_pro||0)),0); // net pur = net payé − frais pro
   const totImpots=fiches.reduce((a,p)=>a+(p.impots_pas||0),0);
   const totFrais=fiches.reduce((a,p)=>a+(p.frais_pro||0),0);
   const totHeures=fiches.reduce((a,p)=>a+(p.heures_mensuel||0),0);
   const totResto=fiches.reduce((a,p)=>a+(p.titres_resto||0),0);
   let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-    <div style="background:rgba(74,240,176,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">💰 Salaire net pur cumulé</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totNet.toFixed(2)} €</div></div>
-    <div style="background:rgba(240,64,128,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">🏛 Impôts cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--red);">${totImpots.toFixed(2)} €</div></div>
-    <div style="background:rgba(74,240,176,.04);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">📋 Frais pro cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totFrais.toFixed(2)} €</div></div>
-    <div style="background:var(--sur2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">⏱ Heures cumulées</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--blu);">${totHeures.toFixed(1)} h</div></div>
+    <div style="background:rgba(74,240,176,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,.75);">💰 Salaire net pur cumulé</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totNet.toFixed(2)} €</div></div>
+    <div style="background:rgba(240,64,128,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,.75);">🏛 Impôts cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--red);">${totImpots.toFixed(2)} €</div></div>
+    <div style="background:rgba(74,240,176,.04);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,.75);">📋 Frais pro cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totFrais.toFixed(2)} €</div></div>
+    <div style="background:var(--sur2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,.75);">⏱ Heures cumulées</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--blu);">${totHeures.toFixed(1)} h</div></div>
   </div>`;
-  if(totResto>0) html+=`<div style="font-size:11px;color:var(--tx2);text-align:center;margin-bottom:10px;">🍽 ${totResto} titres-restaurant cumulés</div>`;
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr style="color:var(--tx3);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:3px 4px;">Mois</th><th style="padding:3px 4px;">Heures</th><th style="padding:3px 4px;">Net pur</th><th style="padding:3px 4px;">Impôts</th><th style="padding:3px 4px;">Frais</th></tr></thead><tbody>`;
+  if(totResto>0) html+=`<div style="font-size:11px;color:rgba(255,255,255,.9);text-align:center;margin-bottom:10px;">🍽 ${totResto} titres-restaurant cumulés</div>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr style="color:rgba(255,255,255,.75);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:3px 4px;">Mois</th><th style="padding:3px 4px;">Heures</th><th style="padding:3px 4px;">Net pur</th><th style="padding:3px 4px;">Impôts</th><th style="padding:3px 4px;">Frais</th></tr></thead><tbody>`;
   fiches.forEach(p=>{
     const netPurMois=(p.net_paye||0)-(p.frais_pro||0);
     html+=`<tr style="border-top:1px solid var(--brd);"><td style="padding:4px;">${p.periode}</td><td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${(p.heures_mensuel||0)}h</td><td style="padding:4px;text-align:center;color:var(--grn);font-family:'DM Mono',monospace;">${netPurMois.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);font-family:'DM Mono',monospace;">${(p.impots_pas||0).toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--acc);font-family:'DM Mono',monospace;">${(p.frais_pro||0)>0?(p.frais_pro).toFixed(2)+'€':'—'}</td></tr>`;
@@ -2275,7 +2275,7 @@ function renderPaieHistorique(){
     return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--brd);border-radius:6px;margin-bottom:6px;cursor:pointer;" onclick="displayPaie(${JSON.stringify(p).replace(/"/g,'&quot;')})">
       <span style="font-size:11px;font-weight:600;">${p.periode}</span>
       <span style="font-size:11px;color:var(--grn);">${netPur} €</span>
-      <span style="font-size:10px;color:var(--tx3);">${(p.heures_mensuel||0)}h</span>
+      <span style="font-size:10px;color:rgba(255,255,255,.75);">${(p.heures_mensuel||0)}h</span>
     </div>`;
   }).join('');
 }

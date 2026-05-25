@@ -640,7 +640,7 @@ select option{background:var(--sur2);}
         </div>
         <div style="text-align:right;">
           <div style="font-size:20px;font-weight:800;color:var(--grn);" id="paie-net">—</div>
-          <div style="font-size:10px;color:var(--tx3);">Net payé</div>
+          <div style="font-size:10px;color:#fff;opacity:.8;">Salaire net (hors frais pro)</div>
         </div>
       </div>
     </div>
@@ -648,23 +648,23 @@ select option{background:var(--sur2);}
     <!-- 4 cartes résumé -->
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
       <div class="solde-box">
-        <div class="sl">⏱ Heures déclarées</div>
+        <div class="sl" style="color:#fff;opacity:.9;">⏱ Heures déclarées</div>
         <div class="sv" id="paie-heures" style="color:var(--blu)">—</div>
-        <div style="font-size:9px;color:var(--tx3);" id="paie-heures-sub">—</div>
+        <div style="font-size:9px;color:var(--tx2);" id="paie-heures-sub">—</div>
       </div>
       <div class="solde-box">
-        <div class="sl">💰 Net avant impôts</div>
+        <div class="sl" style="color:#fff;opacity:.9;">💰 Net avant impôts</div>
         <div class="sv" id="paie-brut" style="color:var(--tx)">—</div>
       </div>
       <div class="solde-box" style="background:rgba(240,64,128,.06);border-color:rgba(240,64,128,.2);">
-        <div class="sl">🏛 Impôts prélevés (PAS)</div>
+        <div class="sl" style="color:#fff;opacity:.9;">🏛 Impôts prélevés (PAS)</div>
         <div class="sv" id="paie-impots" style="color:var(--red)">—</div>
-        <div style="font-size:9px;color:var(--tx3);" id="paie-impots-cumul">—</div>
+        <div style="font-size:9px;color:var(--tx2);" id="paie-impots-cumul">—</div>
       </div>
       <div class="solde-box" style="background:rgba(74,240,176,.06);border-color:rgba(74,240,176,.2);">
-        <div class="sl">📋 Frais professionnels</div>
+        <div class="sl" style="color:#fff;opacity:.9;">📋 Frais professionnels</div>
         <div class="sv" id="paie-frais" style="color:var(--grn)">—</div>
-        <div style="font-size:9px;color:var(--tx3);" id="paie-resto">—</div>
+        <div style="font-size:9px;color:var(--tx2);" id="paie-resto">—</div>
       </div>
     </div>
 
@@ -1103,7 +1103,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   updateBackupDate();
   migrateEntries(); // Corrige les anciens noms de sites
   // Firebase : charger les données puis écouter en temps réel
-  loadFromFirebase().then(()=>startRealtimeSync());
+  loadFromFirebase().then(()=>{
+    startRealtimeSync();
+    loadPaieFromFirebase().then(()=>renderPaieHistorique());
+  });
 });
 
 // ════════════════════════════════════════════
@@ -2084,10 +2087,29 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════
-//  FICHE DE PAIE — Import JSON
+//  FICHE DE PAIE — Import JSON + Firebase sync
 // ════════════════════════════════════════════
 let paieHistory=JSON.parse(localStorage.getItem('cw4_paie')||'[]');
-function savePaieHistory(){ localStorage.setItem('cw4_paie',JSON.stringify(paieHistory)); }
+function savePaieHistory(){
+  localStorage.setItem('cw4_paie',JSON.stringify(paieHistory));
+  // Sync Firebase
+  if(DOC) DOC.update({paieHistory}).catch(e=>console.warn('Paie sync err:',e));
+}
+
+// Charger paieHistory depuis Firebase au démarrage
+async function loadPaieFromFirebase(){
+  if(!DOC) return;
+  try{
+    const doc=await DOC.get();
+    if(doc.exists){
+      const data=doc.data();
+      if(data.paieHistory&&data.paieHistory.length>=paieHistory.length){
+        paieHistory=data.paieHistory;
+        localStorage.setItem('cw4_paie',JSON.stringify(paieHistory));
+      }
+    }
+  }catch(e){ console.warn('Paie load err:',e); }
+}
 
 function handlePaieJSON(file){
   if(!file) return;
@@ -2129,7 +2151,8 @@ function importPaieData(fiches){
 function displayPaie(paie){
   document.getElementById('paie-result').style.display='block';
   document.getElementById('paie-titre').textContent='Bulletin de salaire — '+paie.periode;
-  document.getElementById('paie-net').textContent=(paie.net_paye||0).toFixed(2)+' €';
+  const netPur=(paie.net_paye||0)-(paie.frais_pro||0);
+  document.getElementById('paie-net').textContent=netPur.toFixed(2)+' €';
   document.getElementById('paie-heures').textContent=(paie.heures_mensuel||0)+'h';
   document.getElementById('paie-brut').textContent=(paie.net_avant_impots||0).toFixed(2)+' €';
   document.getElementById('paie-impots').textContent='−'+(paie.impots_pas||0).toFixed(2)+' €';
@@ -2221,21 +2244,24 @@ function renderCumuls(paie){
   const el=document.getElementById('paie-cumuls');
   const fiches=paieHistory.filter(p=>p.annee===paie.annee).sort((a,b)=>a.mois_num-b.mois_num);
   if(!fiches.length){ el.innerHTML='<p style="color:var(--tx3);font-size:11px;">Importez plusieurs fiches pour voir les cumuls annuels.</p>'; return; }
-  const totNet=fiches.reduce((a,p)=>a+(p.net_paye||0),0);
+  const totNet=fiches.reduce((a,p)=>a+((p.net_paye||0)-(p.frais_pro||0)),0); // net pur = net payé − frais pro
   const totImpots=fiches.reduce((a,p)=>a+(p.impots_pas||0),0);
   const totFrais=fiches.reduce((a,p)=>a+(p.frais_pro||0),0);
   const totHeures=fiches.reduce((a,p)=>a+(p.heures_mensuel||0),0);
   const totResto=fiches.reduce((a,p)=>a+(p.titres_resto||0),0);
   let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-    <div style="background:rgba(74,240,176,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">💰 Paie nette cumulée</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totNet.toFixed(2)} €</div></div>
+    <div style="background:rgba(74,240,176,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">💰 Salaire net pur cumulé</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totNet.toFixed(2)} €</div></div>
     <div style="background:rgba(240,64,128,.06);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">🏛 Impôts cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--red);">${totImpots.toFixed(2)} €</div></div>
     <div style="background:rgba(74,240,176,.04);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">📋 Frais pro cumulés</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--grn);">${totFrais.toFixed(2)} €</div></div>
     <div style="background:var(--sur2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--tx3);">⏱ Heures cumulées</div><div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--blu);">${totHeures.toFixed(1)} h</div></div>
   </div>`;
   if(totResto>0) html+=`<div style="font-size:11px;color:var(--tx2);text-align:center;margin-bottom:10px;">🍽 ${totResto} titres-restaurant cumulés</div>`;
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr style="color:var(--tx3);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:3px 4px;">Mois</th><th style="padding:3px 4px;">Heures</th><th style="padding:3px 4px;">Net</th><th style="padding:3px 4px;">Impôts</th><th style="padding:3px 4px;">Frais</th></tr></thead><tbody>`;
-  fiches.forEach(p=>{ html+=`<tr style="border-top:1px solid var(--brd);"><td style="padding:4px;">${p.periode}</td><td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${(p.heures_mensuel||0)}h</td><td style="padding:4px;text-align:center;color:var(--grn);font-family:'DM Mono',monospace;">${(p.net_paye||0).toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);font-family:'DM Mono',monospace;">${(p.impots_pas||0).toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--grn);font-family:'DM Mono',monospace;">${(p.frais_pro||0)>0?(p.frais_pro).toFixed(2)+'€':'—'}</td></tr>`; });
-  html+=`<tr style="border-top:2px solid var(--brd);font-weight:700;"><td style="padding:4px;">TOTAL</td><td style="padding:4px;text-align:center;color:var(--blu);">${totHeures.toFixed(1)}h</td><td style="padding:4px;text-align:center;color:var(--grn);">${totNet.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);">${totImpots.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--grn);">${totFrais.toFixed(2)}€</td></tr></tbody></table>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr style="color:var(--tx3);font-size:9px;text-transform:uppercase;"><th style="text-align:left;padding:3px 4px;">Mois</th><th style="padding:3px 4px;">Heures</th><th style="padding:3px 4px;">Net pur</th><th style="padding:3px 4px;">Impôts</th><th style="padding:3px 4px;">Frais</th></tr></thead><tbody>`;
+  fiches.forEach(p=>{
+    const netPurMois=(p.net_paye||0)-(p.frais_pro||0);
+    html+=`<tr style="border-top:1px solid var(--brd);"><td style="padding:4px;">${p.periode}</td><td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${(p.heures_mensuel||0)}h</td><td style="padding:4px;text-align:center;color:var(--grn);font-family:'DM Mono',monospace;">${netPurMois.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);font-family:'DM Mono',monospace;">${(p.impots_pas||0).toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--acc);font-family:'DM Mono',monospace;">${(p.frais_pro||0)>0?(p.frais_pro).toFixed(2)+'€':'—'}</td></tr>`;
+  });
+  html+=`<tr style="border-top:2px solid var(--brd);font-weight:700;"><td style="padding:4px;">TOTAL</td><td style="padding:4px;text-align:center;color:var(--blu);">${totHeures.toFixed(1)}h</td><td style="padding:4px;text-align:center;color:var(--grn);">${totNet.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--red);">${totImpots.toFixed(2)}€</td><td style="padding:4px;text-align:center;color:var(--acc);">${totFrais.toFixed(2)}€</td></tr></tbody></table>`;
   el.innerHTML=html;
 }
 
@@ -2244,12 +2270,14 @@ function renderPaieHistorique(){
   const card=document.getElementById('paie-historique-card');
   if(!paieHistory.length){ card.style.display='none'; return; }
   card.style.display='block';
-  el.innerHTML=paieHistory.sort((a,b)=>a.annee!==b.annee?a.annee-b.annee:a.mois_num-b.mois_num).map(p=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--brd);border-radius:6px;margin-bottom:6px;cursor:pointer;" onclick="displayPaie(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+  el.innerHTML=paieHistory.sort((a,b)=>a.annee!==b.annee?a.annee-b.annee:a.mois_num-b.mois_num).map(p=>{
+    const netPur=((p.net_paye||0)-(p.frais_pro||0)).toFixed(2);
+    return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--brd);border-radius:6px;margin-bottom:6px;cursor:pointer;" onclick="displayPaie(${JSON.stringify(p).replace(/"/g,'&quot;')})">
       <span style="font-size:11px;font-weight:600;">${p.periode}</span>
-      <span style="font-size:11px;color:var(--grn);">${(p.net_paye||0).toFixed(2)} €</span>
+      <span style="font-size:11px;color:var(--grn);">${netPur} €</span>
       <span style="font-size:10px;color:var(--tx3);">${(p.heures_mensuel||0)}h</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function clearPaieHistory(){

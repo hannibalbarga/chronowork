@@ -310,7 +310,7 @@ select option{background:var(--sur2);}
   <div class="card">
     <h3><span class="dot" style="background:var(--pur)"></span>Poser un congé ou repos compensateur</h3>
     <div class="info leave-info" style="--acc:var(--pur);">
-      <strong style="color:var(--pur)">Congés payés :</strong> Droit annuel <strong style="color:var(--pur)">25 jours</strong> — chaque CP posé est déduit du solde.<br>
+      <strong style="color:var(--pur)">Congés payés :</strong> Droit annuel <strong style="color:var(--pur)">30 jours ouvrables</strong> — chaque CP posé est déduit du solde.<br>
       <strong style="color:var(--pur)">Repos compensateur :</strong> Déduit de vos heures supplémentaires (7h = 1 jour).<br>
       Les weekends sont automatiquement exclus.
     </div>
@@ -797,7 +797,7 @@ const W35 = 35*60;   // 2100 min — seuil hebdo HS
 const W43 = 43*60;   // 2580 min — seuil tranche 2
 const DAY9 = 9*60;   // 540 min — journée type
 const DAY7 = 7*60;   // 420 min — congé / repos
-const CP_TOTAL = 25; // droit annuel CP
+const CP_TOTAL = 30; // droit annuel CP — 30 jours ouvrables (2.5j/mois × 12, convention IDCC 1147)
 
 const JF = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 const MF = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
@@ -1724,7 +1724,7 @@ function showCPDetail(){
       <div style="font-weight:700;color:var(--pur);margin-bottom:6px;">📋 Règle légale</div>
       Embauche : <strong>${new Date(CP_START).toLocaleDateString('fr-FR')}</strong><br>
       Cumul : <strong>2,08 j/mois</strong> travaillé (= 25 j ÷ 12 mois)<br>
-      25 jours complets acquis le : <strong>${dateCompl.toLocaleDateString('fr-FR')}</strong>
+      30 jours acquis au total le : <strong>${dateCompl.toLocaleDateString('fr-FR')}</strong>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
       <div style="background:var(--sur2);border-radius:8px;padding:8px;text-align:center;">
@@ -1957,7 +1957,7 @@ function calcCPAcquis(){
   const today=new Date();
   let mois=(today.getFullYear()-start.getFullYear())*12+(today.getMonth()-start.getMonth());
   if(today.getDate()<start.getDate()) mois=Math.max(0,mois-1);
-  return Math.min(CP_TOTAL, Math.floor(mois*2.0833*10)/10);
+  return Math.min(CP_TOTAL, Math.floor(mois*2.5*10)/10); // 2.5j/mois convention IDCC 1147
 }
 
 function refreshLeave(){
@@ -2203,10 +2203,10 @@ function renderCompteurAnnuel(paie){
   const start=embauche.getFullYear()===annee?embauche:new Date(annee,0,1);
   const ratioAnnee=Math.min(1,(finAnnee-start)/(1000*60*60*24*365));
   // VOL_LEGAL = 1607h/an (base légale France)
-  // VOL_CW = ton calcul : 52sem×35h − 35j cal congés (=25j ouvrables×7h) − fériés semaine
-  // 1820h − 175h congés − 49h fériés = 1596h
+  // VOL_CW = ton calcul : 52sem×35h − 30j ouvrables congés (×7h=210h) − 7 fériés semaine (×7h=49h)
+  // 1820h − 210h congés − 49h fériés = 1561h
   const VOL_LEGAL=Math.round(1607*ratioAnnee);
-  const VOL_CW=Math.round(1596*ratioAnnee);
+  const VOL_CW=Math.round(1561*ratioAnnee);
   const ym=annee+'-'+String(paie.mois_num).padStart(2,'0');
   const heuresCumulCW=entries.filter(e=>e.type==='work'&&e.date.startsWith(String(annee))&&e.date<=ym+'-31').reduce((a,e)=>a+e.netMin,0)/60;
   const fichesCumul=paieHistory.filter(p=>p.annee===annee&&p.mois_num<=paie.mois_num);

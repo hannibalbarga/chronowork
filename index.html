@@ -447,19 +447,27 @@ select option{background:var(--sur2);}
     <h4>HS CDI/CDD — Détail des majorations</h4>
     <div class="brow2"><span class="d">Heures normales (≤ 35h/sem)</span><span class="v" style="color:var(--grn)" id="b-n">0h00</span></div>
     <div style="height:1px;background:rgba(240,192,64,.15);margin:4px 0;"></div>
-    <div class="brow2"><span class="d">HS tranche 1 — entre 36h et 43h</span><span class="v" style="color:var(--acc)" id="b-s1-h">0h00</span></div>
+    <div class="brow2"><span class="d">HS au-delà de 35h — tout à +25%</span><span class="v" style="color:var(--acc)" id="b-s1-h">0h00</span></div>
     <div class="brow2" style="padding-left:14px;"><span class="d" style="font-size:10px;">→ Majoration +25% appliquée</span><span class="v" style="color:var(--acc);font-size:11px" id="b-s1-maj">+ 0h00</span></div>
-    <div class="brow2" style="padding-left:14px;background:rgba(240,192,64,.04);border-radius:4px;"><span class="d" style="font-size:10px;font-weight:600">= Équivalent majoré tranche 1</span><span class="v" style="color:var(--acc);font-weight:700" id="b-s1-tot">0h00</span></div>
-    <div style="height:1px;background:rgba(240,64,128,.15);margin:4px 0;"></div>
+    <div class="brow2" style="padding-left:14px;background:rgba(240,192,64,.04);border-radius:4px;"><span class="d" style="font-size:10px;font-weight:600">= Équivalent majoré</span><span class="v" style="color:var(--acc);font-weight:700" id="b-s1-tot">0h00</span></div>
+    <div style="display:none" id="b-s2-row">
     <div class="brow2"><span class="d">HS tranche 2 — au-delà de 43h</span><span class="v" style="color:var(--red)" id="b-s2-h">0h00</span></div>
     <div class="brow2" style="padding-left:14px;"><span class="d" style="font-size:10px;">→ Majoration +50% appliquée</span><span class="v" style="color:var(--red);font-size:11px" id="b-s2-maj">+ 0h00</span></div>
     <div class="brow2" style="padding-left:14px;background:rgba(240,64,128,.04);border-radius:4px;"><span class="d" style="font-size:10px;font-weight:600">= Équivalent majoré tranche 2</span><span class="v" style="color:var(--red);font-weight:700" id="b-s2-tot">0h00</span></div>
+    </div>
     <div style="height:1px;background:var(--brd);margin:6px 0;"></div>
     <div class="brow2"><span class="d">Repos compensateur posé</span><span class="v" style="color:var(--pur)" id="b-rc">0 j = 0h00</span></div>
     <div class="brow2" style="background:rgba(240,64,128,.06);border-radius:6px;padding:8px;margin-top:4px;">
       <span class="d" style="font-weight:700;font-size:12px;">TOTAL HS MAJORÉES NETTES</span>
       <span class="v" style="color:var(--red);font-weight:800;font-size:14px;font-family:'Syne',sans-serif;" id="b-sn">0h00</span>
     </div>
+    <!-- Contrepartie trajets -->
+    <div style="height:1px;background:var(--brd);margin:8px 0;"></div>
+    <div class="brow2" style="background:rgba(240,192,64,.06);border-radius:6px;padding:8px;border:1px solid rgba(240,192,64,.2);">
+      <span class="d" style="font-weight:700;font-size:11px;color:var(--acc);">🚗 Contrepartie trajets due</span>
+      <span class="v" style="color:var(--acc);font-weight:800;" id="b-trajet">0h00</span>
+    </div>
+    <div class="brow2" style="padding-left:8px;"><span class="d" style="font-size:10px;color:rgba(255,255,255,.7);">Trajets dépassant trajet habituel (Art. L3121-4)</span><span class="v" style="font-size:10px;color:rgba(255,255,255,.7);" id="b-trajet-jours">0 jour(s)</span></div>
     <!-- Bouton transformer 7h en repos -->
     <div id="conv-repos-wrap" style="display:none;margin-top:10px;padding:10px;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.3);border-radius:8px;">
       <div style="font-size:11px;color:var(--pur);margin-bottom:6px;" id="conv-repos-msg"></div>
@@ -558,6 +566,7 @@ select option{background:var(--sur2);}
       <label>Type de rapport
         <select id="r-type" onchange="onRTypeChange();previewReport()">
           <option value="cdi">CDI/CDD uniquement</option>
+          <option value="cdi_v3">📊 CDI/CDD — V3 Synthèse DRH</option>
           <option value="interim">Intérim uniquement</option>
           <option value="both">CDI + Intérim (cumulé)</option>
           <option value="repos">🏖️ Vacances (Repos compensateur HS)</option>
@@ -2012,63 +2021,58 @@ function calcOT(list){
 // Utilisée par le Bilan, l'Historique et les Congés
 function calcCagnotte(){
   // HS semaine par semaine — TOUTES les entrées CDI
-  // Règle légale : les jours fériés CHÔMÉS sont assimilés à du temps de travail effectif
-  // pour le calcul du SEUIL de déclenchement des HS (35h)
-  // Mais ils ne génèrent pas eux-mêmes des HS — seules les heures réellement travaillées comptent
+  // V2 : les trajets (travelMin) sont EXCLUS du calcul des HS
+  // Seul netWork (temps effectif) génère des HS
+  // Les trajets génèrent une contrepartie séparée
 
   const wks={};
 
-  // 1. Heures réellement travaillées (CDI)
+  // 1. Heures réellement travaillées SANS les trajets
   entries.filter(e=>e.type==='work').forEach(e=>{
     const w=isoWeek(e.date);
     if(!wks[w]) wks[w]={work:0, ferieChome:0, solidarite:0};
+    const netTravail=e.netWork||e.netMin; // netWork = sans trajet, fallback netMin
     if(isJourSolidarite(e.date)){
-      wks[w].solidarite+=e.netMin; // journée solidarité : ne compte pas dans HS
+      wks[w].solidarite+=netTravail;
     } else {
-      wks[w].work+=e.netMin;
+      wks[w].work+=netTravail;
     }
   });
 
-  // 2. Jours fériés chômés de la semaine (non travaillés)
-  // On cherche les fériés qui tombent en semaine CDI (lun-jeu) et qui ne sont pas travaillés
+  // 2. Jours fériés chômés → assimilés comme temps effectif (abaisse le seuil 35h)
   const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
-  const leaveTypes=new Set(entries.filter(e=>e.type==='leave').map(e=>e.date));
-
-  // Pour chaque semaine qui a des heures travaillées, on cherche les fériés chômés
   const weeksWithWork=new Set(Object.keys(wks));
   weeksWithWork.forEach(w=>{
-    // Trouver les jours de cette semaine ISO
     const [yr,wn]=w.split('-W').map(Number);
-    // Premier jour de la semaine ISO (lundi)
     const jan4=new Date(yr,0,4);
     const monday=new Date(jan4);
     monday.setDate(jan4.getDate()-(jan4.getDay()||7)+1+(wn-1)*7);
-    // Parcourir lundi→vendredi de cette semaine
     for(let d=0;d<5;d++){
       const dt=new Date(monday);
       dt.setDate(monday.getDate()+d);
       const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-      // Si ce jour est férié ET non travaillé ET non journée solidarité
       if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)){
-        if(!wks[w]) wks[w]={work:0,ferieChome:0,solidarite:0};
         if(!wks[w].ferieChome) wks[w].ferieChome=0;
-        wks[w].ferieChome+=DAY7; // 7h assimilées
+        wks[w].ferieChome+=DAY7;
       }
     }
   });
 
-  // 3. Calcul des HS réelles semaine par semaine
-  // Seuil effectif = 35h - fériés chômés assimilés
-  // HS réelles = heures CDI au-delà du seuil effectif
+  // 3. Calcul HS réelles semaine par semaine — tout à +25% (méthode DRH)
+  // Pas de distinction tranche +50% — conforme au calcul employeur
   let s1Real=0, s2Real=0;
   Object.values(wks).forEach(({work=0, ferieChome=0})=>{
-    const seuilEffectif=Math.max(0, W35-ferieChome); // seuil réduit par les fériés
-    const hsReelles=Math.max(0, work-seuilEffectif);  // HS réelles sur heures travaillées
-    const t1=Math.max(0, Math.min(hsReelles, W43-W35)); // tranche +25%
-    const t2=Math.max(0, hsReelles-(W43-W35));            // tranche +50%
-    s1Real+=t1;
-    s2Real+=t2;
+    const seuilEffectif=Math.max(0, W35-ferieChome);
+    const hsReelles=Math.max(0, work-seuilEffectif);
+    s1Real+=hsReelles; // tout en +25%
+    s2Real+=0;         // +50% désactivé
   });
+
+  // 4. Contrepartie trajets (toutes les entrées CDI avec trajet)
+  // Trajet habituel estimé = 0 (tu habites Limoges, sites tous distants)
+  // Donc 100% du trajet = contrepartie due
+  const totalTrajetMin=entries.filter(e=>e.type==='work').reduce((a,e)=>a+(e.travelMin||0),0);
+  const joursTrajet=entries.filter(e=>e.type==='work'&&(e.travelMin||0)>0).length;
 
   const s1Maj=Math.round(s1Real*0.25);
   const s2Maj=Math.round(s2Real*0.5);
@@ -2096,7 +2100,7 @@ function calcCagnotte(){
   const cagnotte=Math.max(0,hsMajBrut-totalDeduction);
   const joursDispos=Math.floor(cagnotte/DAY7);
 
-  return{s1:s1Real,s2:s2Real,s1Maj,s2Maj,hsMajBrut,rcN,reposMin,solidariteDeduction,cagnotte,joursDispos};
+  return{s1:s1Real,s2:s2Real,s1Maj,s2Maj,hsMajBrut,rcN,reposMin,solidariteDeduction,cagnotte,joursDispos,totalTrajetMin,joursTrajet};
 }
 
 // ════════════════════════════════════════════
@@ -2351,6 +2355,11 @@ function updateSummary(){
   document.getElementById('b-rc').textContent=rcNCag+' j = '+hhmm(rcNCag*DAY7)+' déduit'
     +(cag.solidariteDeduction>0?' + Solidarité: −'+hhmm(cag.solidariteDeduction):'');
   document.getElementById('b-sn').textContent=hhmm(hsNMaj);
+  // Contrepartie trajets
+  if(document.getElementById('b-trajet')){
+    document.getElementById('b-trajet').textContent=hhmm(cag.totalTrajetMin||0);
+    document.getElementById('b-trajet-jours').textContent=(cag.joursTrajet||0)+' jour(s) avec trajet';
+  }
 
   // Cagnotte card
   document.getElementById('s-sh').textContent=hhmm(hsNMaj);
@@ -2711,7 +2720,9 @@ function previewReport(){
 function genReport(){
   const name=document.getElementById('r-name').value||'Employé';
   const perLbl=document.getElementById('r-period-lbl').value;
-  const rtype=document.getElementById('r-type').value;
+  const rtype_raw=document.getElementById('r-type').value;
+  const rtype=rtype_raw==='cdi_v3'?'cdi':rtype_raw;
+  const isV3=rtype_raw==='cdi_v3';
   const agencyFilter=document.getElementById('r-agency').value;
   const now=new Date();
 
@@ -2905,36 +2916,64 @@ function genReport(){
 
   // ── CDI/CDD ──
   if(wList.length){
-    // Construction du wkMap avec les jours de la période
+    // Sites dont les trajets sont EXCLUS en V3 (site de référence = Lamotte-Beuvron)
+    const SITES_EXCLUS_TRAJET=isV3?['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte']:[];
+
     const wkMap={};
     wList.forEach(e=>{ const w=isoWeek(e.date); if(!wkMap[w])wkMap[w]=[]; wkMap[w].push(e); });
 
-    // Pour les semaines à cheval sur la période, récupérer aussi les jours
-    // hors période de la même semaine ISO pour calculer correctement les HS
-    const wkMapFull={}; // semaine complète pour calcul HS
+    // Semaine complète pour calcul HS — SANS trajets (V3)
+    const wkMapFull={};
     Object.keys(wkMap).forEach(wk=>{
-      // Tous les jours CDI de cette semaine ISO (pas seulement ceux dans la période)
       const allDaysInWeek=entries.filter(e=>e.type==='work'&&isoWeek(e.date)===wk);
-      wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+e.netMin,0);
+      // netWork = heures sans trajets (si disponible) sinon netMin
+      wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+(e.netWork||e.netMin),0);
+    });
+
+    // Fériés chômés par semaine
+    const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
+    const ferieChomeByWk={};
+    Object.keys(wkMap).forEach(wk=>{
+      const[yr,wn]=wk.split('-W').map(Number);
+      const jan4=new Date(yr,0,4);
+      const monday=new Date(jan4);
+      monday.setDate(jan4.getDate()-(jan4.getDay()||7)+1+(wn-1)*7);
+      let fc=0;
+      for(let d=0;d<5;d++){
+        const dt=new Date(monday); dt.setDate(monday.getDate()+d);
+        const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+        if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)) fc+=DAY7;
+      }
+      ferieChomeByWk[wk]=fc;
     });
 
     L.push('');
     L.push('  JOURNÉES CDI/CDD');
     L.push(SEP);
+
+    // Totaux V3 pour récapitulatif final
+    let v3_t1=0, v3_t2=0, v3_trajets=0;
+    let v3_absences=[];
+
     Object.entries(wkMap).sort().forEach(([wk,wE])=>{
-      const[yr,wn]=wk.split('-W');
-      // Total affiché = jours dans la période
       const totPeriode=wE.reduce((a,e)=>a+e.netMin,0);
-      // Total réel = semaine ISO complète pour calcul HS correct
-      const totSemaineComplete=wkMapFull[wk]||totPeriode;
-      const s1=Math.max(0,Math.min(totSemaineComplete,W43)-W35);
-      const s2=Math.max(0,totSemaineComplete-W43);
+      const totSemaineComplete=wkMapFull[wk]||0;
+      const ferieChome=ferieChomeByWk[wk]||0;
+      const seuilEffectif=Math.max(0,W35-ferieChome);
+      const s1=Math.max(0,Math.min(totSemaineComplete,Math.min(seuilEffectif+W43-W35,W43))-seuilEffectif);
+      const s2=Math.max(0,totSemaineComplete-Math.max(seuilEffectif,W43));
       const hs=s1+s2;
 
-      // Jours hors période dans cette semaine
+      // Trajets de la semaine — hors sites exclus
+      const trajetsSemaine=wE.reduce((a,e)=>{
+        const siteExclu=SITES_EXCLUS_TRAJET.some(s=>(e.site||'').includes(s));
+        return a+(siteExclu?0:(e.travelMin||0));
+      },0);
+      v3_trajets+=trajetsSemaine;
+      v3_t1+=s1; v3_t2+=s2;
+
       const joursHorsPeriode=entries.filter(e=>
-        e.type==='work' && isoWeek(e.date)===wk &&
-        (e.date<from||e.date>to)
+        e.type==='work'&&isoWeek(e.date)===wk&&(e.date<from||e.date>to)
       );
 
       L.push('');
@@ -2944,64 +2983,102 @@ function genReport(){
       L.push('  '+'-'.repeat(62));
       wE.sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
         const tw=e.travelMin||0;
-        const tj=tw>0?' [+'+hhmm(tw)+' trajet '+e.travelType+']':'';
+        const siteExclu=SITES_EXCLUS_TRAJET.some(s=>(e.site||'').includes(s));
+        const netTravail=e.netWork||e.netMin;
+        const tj=tw>0?' [+'+hhmm(tw)+' trajet '+e.travelType+(siteExclu?' — exclu synthèse':'')+']':'';
         const note=e.note?' ('+e.note+')':'';
         const solidarite=isJourSolidarite(e.date)?' ⚡[Solidarité]':'';
-        L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(e.netMin).padEnd(10)+(e.site||'—')+tj+note+solidarite);
+        L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(netTravail).padEnd(10)+(e.site||'—')+tj+note+solidarite);
       });
-      // Mentionner les jours hors période qui ont été pris en compte pour les HS
       if(joursHorsPeriode.length){
         L.push('  [+ jours hors période pris en compte pour HS : '+
-          joursHorsPeriode.map(e=>dStr(e.date)+' '+hhmm(e.netMin)).join(', ')+']');
+          joursHorsPeriode.map(e=>dStr(e.date)+' '+hhmm(e.netWork||e.netMin)).join(', ')+']');
+      }
+      if(ferieChome>0){
+        L.push('  [⚡ Férié chômé cette semaine : +'+hhmm(ferieChome)+' assimilés → seuil HS : '+hhmm(seuilEffectif)+']');
       }
       L.push('  '+'-'.repeat(62));
-      L.push('  Total période          : '+hhmm(totPeriode));
-      if(joursHorsPeriode.length){
-        L.push('  Total semaine complète : '+hhmm(totSemaineComplete)+' (base calcul HS)');
-      }
+      L.push('  Total heures travaillées   : '+hhmm(totSemaineComplete));
+      if(trajetsSemaine>0)
+        L.push('  Trajets (hors Lamotte)     : '+hhmm(trajetsSemaine));
+
       if(hs>0){
         const s1m=Math.round(s1*0.25), s2m=Math.round(s2*0.5);
         L.push('');
-        L.push('  *** HS '+isoWeekLabel(wk)+' (calcul semaine complète) ***');
+        L.push('  * HS '+isoWeekLabel(wk)+' (calcul semaine complète) *');
         if(s1>0) L.push('    +25% : '+hhmm(s1)+' + '+hhmm(s1m)+' = '+hhmm(s1+s1m));
         if(s2>0) L.push('    +50% : '+hhmm(s2)+' + '+hhmm(s2m)+' = '+hhmm(s2+s2m));
         L.push('    TOTAL HS majorées : '+hhmm(hs+s1m+s2m));
+        if(trajetsSemaine>0){
+          const trajMaj=Math.round(trajetsSemaine*0.25);
+          L.push('    Trajets × 1.25    : '+hhmm(trajetsSemaine)+' + '+hhmm(trajMaj)+' = '+hhmm(trajetsSemaine+trajMaj));
+        }
       } else {
         L.push('  Heures supplémentaires: aucune cette semaine');
+        if(trajetsSemaine>0){
+          const trajMaj=Math.round(trajetsSemaine*0.25);
+          L.push('  Trajets × 1.25    : '+hhmm(trajetsSemaine)+' + '+hhmm(trajMaj)+' = '+hhmm(trajetsSemaine+trajMaj));
+        }
       }
     });
-    // Bilan CDI — calcul sur semaines complètes
-    const allWeeksInReport=Object.keys(wkMap);
-    const wListFull=entries.filter(e=>e.type==='work'&&allWeeksInReport.includes(isoWeek(e.date)));
-    const wC2=calcOT(wListFull);
-    // Recalcul du bilan depuis les semaines complètes pour cohérence
-    let bilS1=0, bilS2=0;
-    Object.keys(wkMap).forEach(wk=>{
-      const tot=wkMapFull[wk]||0;
-      bilS1+=Math.max(0,Math.min(tot,W43)-W35);
-      bilS2+=Math.max(0,tot-W43);
-    });
-    const bilS1m=Math.round(bilS1*0.25);
-    const bilS2m=Math.round(bilS2*0.5);
-    const bilTotal=bilS1+bilS1m+bilS2+bilS2m;
-    const totHeures=wList.reduce((a,e)=>a+e.netMin,0);
+
+    // Absences du mois
+    const absencesMois=entries.filter(e=>e.type==='leave'&&inPeriod(e)).sort((a,b)=>a.date.localeCompare(b.date));
+    if(absencesMois.length){
+      L.push(''); L.push(SEP);
+      L.push('  ABSENCES / CONGÉS CE MOIS');
+      L.push(SEP);
+      absencesMois.forEach(e=>{
+        const typeL={'cp':'📅 CP','repos':'🏖️ RC','ferie':'🎉 Férié','ferie_report':'🎉 Récup. férié','maladie':'🤒 Maladie','autre':'📋 Autre'}[e.leaveType]||e.leaveType;
+        L.push('  '+typeL.padEnd(24)+dStr(e.date)+(e.note?' — '+e.note:''));
+      });
+    }
+
+    // Bilan CDI V3
+    const bilS1m=Math.round(v3_t1*0.25);
+    const bilS2m=Math.round(v3_t2*0.5);
+    const bilTotal=v3_t1+bilS1m+v3_t2+bilS2m;
+    const trajMajTotal=Math.round(v3_trajets*0.25);
+    const totHeures=wList.reduce((a,e)=>a+(e.netWork||e.netMin),0);
 
     L.push('');L.push(SEP);
     L.push('  BILAN CDI/CDD');
     L.push('  Total heures travaillées : '+hhmm(totHeures));
-    if(bilS1+bilS2>0){
+    if(v3_t1+v3_t2>0){
       L.push('');
       L.push('  Détail heures supplémentaires :');
-      if(bilS1>0) L.push('    Tranche +25% : '+hhmm(bilS1)+' × 1.25 = '+hhmm(bilS1+bilS1m));
-      if(bilS2>0) L.push('    Tranche +50% : '+hhmm(bilS2)+' × 1.50 = '+hhmm(bilS2+bilS2m));
+      if(v3_t1>0) L.push('    Tranche +25% : '+hhmm(v3_t1)+' × 1.25 = '+hhmm(v3_t1+bilS1m));
+      if(v3_t2>0) L.push('    Tranche +50% : '+hhmm(v3_t2)+' × 1.50 = '+hhmm(v3_t2+bilS2m));
       L.push('');
       L.push('  TOTAL HS MAJORÉES : '+hhmm(bilTotal));
-      L.push('  (= '+(bilS1>0?hhmm(bilS1+bilS1m)+' (t1)':'')+(bilS1>0&&bilS2>0?' + ':'')+
-             (bilS2>0?hhmm(bilS2+bilS2m)+' (t2)':'')+')');
+      L.push('  (= '+(v3_t1>0?hhmm(v3_t1+bilS1m)+' (t1)':'')+(v3_t1>0&&v3_t2>0?' + ':'')+
+             (v3_t2>0?hhmm(v3_t2+bilS2m)+' (t2)':'')+')');
     } else {
       L.push('  Heures supplémentaires : aucune');
     }
+
+    // Récapitulatif V3 DRH
+    L.push(''); L.push(''); L.push(SEP);
+    L.push('  RÉCAPITULATIF V3 — SYNTHÈSE DRH');
+    L.push(SEP);
+    L.push('  ① Temps de travail effectif (HS majorées) : '+hhmm(bilTotal));
+    if(v3_trajets>0){
+      L.push('  ② Déplacements (hors Lamotte-Beuvron)     : '+hhmm(v3_trajets)+' × 1.25 = '+hhmm(v3_trajets+trajMajTotal));
+    }
+    L.push('  '+'-'.repeat(40));
+    L.push('  TOTAL GÉNÉRAL                             : '+hhmm(bilTotal+(v3_trajets>0?v3_trajets+trajMajTotal:0)));
+    if(absencesMois.length){
+      const cpCount=absencesMois.filter(e=>e.leaveType==='cp').length;
+      const rcCount=absencesMois.filter(e=>e.leaveType==='repos').length;
+      const autreCount=absencesMois.length-cpCount-rcCount;
+      L.push('');
+      L.push('  Absences ce mois :');
+      if(cpCount>0) L.push('    📅 CP     : '+cpCount+' jour(s)');
+      if(rcCount>0) L.push('    🏖️ RC     : '+rcCount+' jour(s)');
+      if(autreCount>0) L.push('    📋 Autres : '+autreCount+' jour(s)');
+    }
   }
+
 
   // ── INTÉRIM ──
   if(iList.length){

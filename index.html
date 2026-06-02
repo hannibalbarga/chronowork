@@ -566,8 +566,7 @@ select option{background:var(--sur2);}
     <div class="fields">
       <label>Type de rapport
         <select id="r-type" onchange="onRTypeChange();previewReport()">
-          <option value="cdi">CDI/CDD uniquement</option>
-          <option value="cdi_v3">📊 CDI/CDD — V3 Synthèse DRH</option>
+          <option value="cdi_v3">💼 CDI/CDD</option>
           <option value="interim">Intérim uniquement</option>
           <option value="both">CDI + Intérim (cumulé)</option>
           <option value="repos">🏖️ Vacances (Repos compensateur HS)</option>
@@ -2665,7 +2664,8 @@ function setReportPeriod(preset){
 function previewReport(){
   const from=document.getElementById('r-from').value;
   const to=document.getElementById('r-to').value;
-  const rtype=document.getElementById('r-type').value;
+  const rtype_p=document.getElementById('r-type').value;
+  const rtype=rtype_p==='cdi_v3'?'cdi':rtype_p;
   const el=document.getElementById('r-preview');
   // Mode repos compensateur
   if(rtype==='repos'){
@@ -2748,7 +2748,7 @@ function genReport(){
   const perLbl=document.getElementById('r-period-lbl').value;
   const rtype_raw=document.getElementById('r-type').value;
   const rtype=rtype_raw==='cdi_v3'?'cdi':rtype_raw;
-  const isV3=rtype_raw==='cdi_v3';
+  const isV3=rtype_raw==='cdi_v3'||rtype_raw==='cdi'||rtype_raw==='both'; // V3 toujours actif
   const agencyFilter=document.getElementById('r-agency').value;
   const now=new Date();
 

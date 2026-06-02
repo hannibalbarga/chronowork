@@ -2991,11 +2991,13 @@ function genReport(){
       const hs=s1+s2;
 
       // Trajets de la semaine — hors sites exclus (Lamotte-Beuvron = site référence)
+      // On cherche dans TOUTES les entrées de la semaine (pas seulement celles dans la période)
       const isSiteExclu=e=>{
         const s=(e.site||'').toLowerCase();
         return SITES_EXCLUS_TRAJET.some(exclu=>s.includes(exclu.toLowerCase()));
       };
-      const trajetsSemaine=wE.reduce((a,e)=>a+(isSiteExclu(e)?0:(e.travelMin||0)),0);
+      const allEntriesSemaine=entries.filter(e=>e.type==='work'&&isoWeek(e.date)===wk);
+      const trajetsSemaine=allEntriesSemaine.reduce((a,e)=>a+(isSiteExclu(e)?0:(e.travelMin||0)),0);
       v3_trajets+=trajetsSemaine;
       v3_t1+=s1; v3_t2+=s2;
 

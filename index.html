@@ -2956,8 +2956,9 @@ function genReport(){
       wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+(e.netWork||e.netMin),0);
     });
 
-    // Fériés chômés par semaine
+    // Fériés chômés + CP/RC posés par semaine → réduisent le seuil HS
     const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
+    const leaveDates=new Set(entries.filter(e=>e.type==='leave').map(e=>e.date));
     const ferieChomeByWk={};
     Object.keys(wkMap).forEach(wk=>{
       const[yr,wn]=wk.split('-W').map(Number);
@@ -2968,7 +2969,12 @@ function genReport(){
       for(let d=0;d<5;d++){
         const dt=new Date(monday); dt.setDate(monday.getDate()+d);
         const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+        // Férié chômé non travaillé (hors solidarité)
         if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)) fc+=DAY7;
+        // Journée de solidarité (chômée ou en CP imposé)
+        if(isJourSolidarite(ds)&&!workDates.has(ds)) fc+=DAY7;
+        // CP ou RC posé ce jour (non travaillé)
+        else if(leaveDates.has(ds)&&!workDates.has(ds)&&!isFerie(ds)&&!isJourSolidarite(ds)) fc+=DAY7;
       }
       ferieChomeByWk[wk]=fc;
     });
@@ -3014,7 +3020,7 @@ function genReport(){
         const tw=e.travelMin||0;
         const siteExclu=isSiteExclu(e);
         const netTravail=e.netWork||e.netMin;
-        const tj=tw>0?' [+'+hhmm(tw)+' trajet '+e.travelType+(siteExclu?' — exclu synthèse':'')+']':'';
+        const tj=tw>0?' [+'+hhmm(tw)+' trajet '+e.travelType+']':'';
         const note=e.note?' ('+e.note+')':'';
         const solidarite=isJourSolidarite(e.date)?' ⚡[Solidarité]':'';
         L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(netTravail).padEnd(10)+(e.site||'—')+tj+note+solidarite);
@@ -3029,7 +3035,7 @@ function genReport(){
       L.push('  '+'-'.repeat(62));
       L.push('  Total heures travaillées   : '+hhmm(totSemaineComplete));
       if(trajetsSemaine>0)
-        L.push('  Trajets (hors Lamotte)     : '+hhmm(trajetsSemaine));
+        L.push('  Trajets                    : '+hhmm(trajetsSemaine));
 
       if(hs>0){
         const s1m=Math.round(s1*0.25), s2m=Math.round(s2*0.5);
@@ -3092,7 +3098,7 @@ function genReport(){
     L.push(SEP);
     L.push('  ① Temps de travail effectif (HS majorées) : '+hhmm(bilTotal));
     if(v3_trajets>0){
-      L.push('  ② Déplacements (hors Lamotte-Beuvron)     : '+hhmm(v3_trajets)+' × 1.25 = '+hhmm(v3_trajets+trajMajTotal));
+      L.push('  ② Déplacements                            : '+hhmm(v3_trajets)+' × 1.25 = '+hhmm(v3_trajets+trajMajTotal));
     }
     L.push('  '+'-'.repeat(40));
     L.push('  TOTAL GÉNÉRAL                             : '+hhmm(bilTotal+(v3_trajets>0?v3_trajets+trajMajTotal:0)));

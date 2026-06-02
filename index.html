@@ -145,6 +145,7 @@ select option{background:var(--sur2);}
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <div class="wkbadge"><strong id="wk-label">—</strong>Semaine en cours</div>
     <div id="sync-status" style="font-size:9px;color:var(--tx3);">⏳ Connexion…</div>
+    <button id="sync-retry-btn" onclick="retrySyncNow()" style="display:none;font-size:9px;background:rgba(240,192,64,.15);border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:2px 6px;cursor:pointer;margin-top:2px;">🔄 Reconnecter</button>
   </div>
 </header>
 
@@ -862,9 +863,25 @@ let syncOK = false;
 function setSyncStatus(ok, msg){
   syncOK = ok;
   const el = document.getElementById('sync-status');
+  const btn = document.getElementById('sync-retry-btn');
   if(el){
     el.textContent = ok ? '☁️ Synchronisé' : '⚠️ ' + (msg||'Hors ligne');
     el.style.color = ok ? 'var(--grn)' : 'var(--acc)';
+  }
+  if(btn) btn.style.display = ok ? 'none' : 'inline-block';
+}
+
+function retrySyncNow(){
+  setSyncStatus(false,'Reconnexion...');
+  const btn=document.getElementById('sync-retry-btn');
+  if(btn) btn.style.display='none';
+  if(DOC){
+    loadFromFirebase().then(()=>{
+      startRealtimeSync();
+      toast('🔄 Tentative de reconnexion Firebase...');
+    }).catch(()=>{
+      setSyncStatus(false,'Reconnexion échouée');
+    });
   }
 }
 
@@ -947,10 +964,19 @@ function startRealtimeSync(){
         renderAll(); refreshLeave(); updateSummary();
         setSyncStatus(true);
         toast('🔄 Données mises à jour depuis un autre appareil');
+      } else {
+        setSyncStatus(true); // connexion OK même si pas de changement
       }
     }
   }, err => {
-    setSyncStatus(false, 'Sync interrompue');
+    setSyncStatus(false, 'Sync interrompue — reconnexion...');
+    // Tentative de reconnexion après 10 secondes
+    setTimeout(()=>{
+      if(DOC){
+        setSyncStatus(false, 'Reconnexion...');
+        startRealtimeSync();
+      }
+    }, 10000);
   });
 }
 

@@ -12,8 +12,8 @@
 <title>ChronoWork</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
 :root{
   --bg:#0a0c10;--sur:#12151c;--sur2:#1a1e28;--brd:#252a38;
@@ -950,7 +950,10 @@ async function saveToFirebase(){
 // Écoute les changements en temps réel (autre appareil)
 function startRealtimeSync(){
   if(!DOC) return;
+  let retryCount=0;
+  const maxRetries=10;
   DOC.onSnapshot(snap => {
+    retryCount=0; // reset si connexion OK
     if(snap.exists){
       const data = snap.data();
       const newEntries = JSON.stringify(data.entries||[]);
@@ -964,18 +967,18 @@ function startRealtimeSync(){
         setSyncStatus(true);
         toast('🔄 Données mises à jour depuis un autre appareil');
       } else {
-        setSyncStatus(true); // connexion OK même si pas de changement
+        setSyncStatus(true);
       }
     }
   }, err => {
-    setSyncStatus(false, 'Sync interrompue — reconnexion...');
-    // Tentative de reconnexion après 10 secondes
-    setTimeout(()=>{
-      if(DOC){
-        setSyncStatus(false, 'Reconnexion...');
-        startRealtimeSync();
-      }
-    }, 10000);
+    console.warn('Firebase sync error:', err.code, err.message);
+    retryCount++;
+    if(retryCount<=maxRetries){
+      setSyncStatus(false, `Sync interrompue — reconnexion ${retryCount}/${maxRetries}...`);
+      setTimeout(()=>startRealtimeSync(), Math.min(30000, retryCount*5000));
+    } else {
+      setSyncStatus(false, 'Sync indisponible — données locales OK');
+    }
   });
 }
 

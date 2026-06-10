@@ -566,7 +566,8 @@ select option{background:var(--sur2);}
     <div class="fields">
       <label>Type de rapport
         <select id="r-type" onchange="onRTypeChange();previewReport()">
-          <option value="cdi_v3">💼 CDI/CDD</option>
+          <option value="cdi_v3">💼 CDI/CDD — V3 Synthèse DRH</option>
+          <option value="cdi">📋 CDI/CDD — V1 (ancien calcul)</option>
           <option value="interim">Intérim uniquement</option>
           <option value="both">CDI + Intérim (cumulé)</option>
           <option value="repos">🏖️ Vacances (Repos compensateur HS)</option>
@@ -2750,7 +2751,7 @@ function genReport(){
   const perLbl=document.getElementById('r-period-lbl').value;
   const rtype_raw=document.getElementById('r-type').value;
   const rtype=rtype_raw==='cdi_v3'?'cdi':rtype_raw;
-  const isV3=rtype_raw==='cdi_v3'||rtype_raw==='cdi'||rtype_raw==='both'; // V3 toujours actif
+  const isV3=rtype_raw==='cdi_v3'||rtype_raw==='both'; // V3 pour cdi_v3 et both, pas pour cdi V1
   const agencyFilter=document.getElementById('r-agency').value;
   const now=new Date();
 
@@ -2950,12 +2951,13 @@ function genReport(){
     const wkMap={};
     wList.forEach(e=>{ const w=isoWeek(e.date); if(!wkMap[w])wkMap[w]=[]; wkMap[w].push(e); });
 
-    // Semaine complète pour calcul HS — SANS trajets (V3)
+    // Semaine complète pour calcul HS
+    // V3 : heures sans trajets (netWork)
+    // V1 : heures avec trajets (netMin) — ancien calcul
     const wkMapFull={};
     Object.keys(wkMap).forEach(wk=>{
       const allDaysInWeek=entries.filter(e=>e.type==='work'&&isoWeek(e.date)===wk);
-      // netWork = heures sans trajets (si disponible) sinon netMin
-      wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+(e.netWork||e.netMin),0);
+      wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+(isV3?(e.netWork||e.netMin):e.netMin),0);
     });
 
     // Fériés chômés + CP/RC posés par semaine → réduisent le seuil HS
@@ -3076,7 +3078,7 @@ function genReport(){
     const bilS2m=Math.round(v3_t2*0.5);
     const bilTotal=v3_t1+bilS1m+v3_t2+bilS2m;
     const trajMajTotal=Math.round(v3_trajets*0.25);
-    const totHeures=wList.reduce((a,e)=>a+(e.netWork||e.netMin),0);
+    const totHeures=wList.reduce((a,e)=>a+(isV3?(e.netWork||e.netMin):e.netMin),0);
 
     L.push('');L.push(SEP);
     L.push('  BILAN CDI/CDD');

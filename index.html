@@ -3373,7 +3373,7 @@ function genReport(){
       L.push('  ② CAGNOTTE TRAJETS (hors Lamotte-Beuvron)');
       L.push('  '+'-'.repeat(40));
       L.push('    Total trajets bruts      : '+hhmm(trajBruts));
-      L.push('    − '+hhmm(hPayees)+' payées en euros ('+hhmm(hPayees)+' × 29.375€ = '+(Math.round(hPayees/60*29.375*100)/100).toFixed(2)+'€)');
+      L.push('    − '+hhmm(hPayees)+' payées en euros');
       L.push('    Reste : '+hhmm(trajReste)+' × 1.25 = '+hhmm(trajResteMaj)+' (RCR trajets)');
     }
 

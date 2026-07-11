@@ -276,8 +276,8 @@ select option{background:var(--sur2);}
   <div class="tbl">
     <table>
       <thead><tr>
-        <th>Jour</th><th>Arrivée</th><th>Départ</th><th>Heures nettes</th>
-        <th>Taux/h</th><th>Salaire</th><th>Frais km</th><th>Agence</th><th>Centre</th><th></th>
+        <th>Jour</th><th>Arrivée</th><th>Départ</th><th>Facturé</th>
+        <th>Taux/h</th><th>Salaire</th><th>Frais km</th><th>Non facturé</th><th>Agence</th><th>Centre</th><th></th>
       </tr></thead>
       <tbody id="i-tbody"></tbody>
       <tfoot id="i-tfoot" style="display:none;">
@@ -566,7 +566,7 @@ select option{background:var(--sur2);}
     <div class="fields">
       <label>Type de rapport
         <select id="r-type" onchange="onRTypeChange();previewReport()">
-          <option value="cdi_v3">💼 CDI/CDD — V4 Synthèse DRH</option>
+          <option value="cdi_v3">💼 CDI/CDD — V4 Synthèse</option>
           <option value="cdi">📋 CDI/CDD — V1 (ancien calcul)</option>
           <option value="interim">Intérim uniquement</option>
           <option value="both">CDI + Intérim (cumulé)</option>
@@ -685,6 +685,11 @@ select option{background:var(--sur2);}
         <div class="sv" id="paie-frais" style="color:var(--grn)">—</div>
         <div style="font-size:9px;color:rgba(255,255,255,.9);" id="paie-resto">—</div>
       </div>
+    </div>
+
+    <!-- Réconciliation -->
+    <div class="card" id="paie-reconciliation-card" style="display:none;">
+      <div id="paie-reconciliation"></div>
     </div>
 
     <!-- Comparaison avec ChronoWork -->
@@ -1374,15 +1379,30 @@ function addInterim(){
 
   let s=tMin(start),e=tMin(end);
   if(e<=s) e+=1440;
-  const net=e-s-brk;
+  const net=e-s-brk; // total heures travaillées
   if(net<=0){ toast('Durée nette invalide.','err'); return; }
 
+  // Calcul heures facturées vs non facturées
+  // Règle : max 10h facturées — au-delà = non facturé
+  const MAX_FACTURE=10*60; // 600 min
+  const netFacture=Math.min(net, MAX_FACTURE);  // heures facturées
+  const nonFacture=Math.max(0, net-MAX_FACTURE); // heures non facturées
+
   const fraisKm=km>0?calcKm(km,cv):0;
-  const sal=rate>0?(net/60)*rate:0;
-  entries.push({id:nid++,type:'interim',date,start,end,break:brk,netMin:net,netWork:net,travelMin:0,travelType:'',agency,site,km,cv,fraisKm,rate,sal});
+  const sal=rate>0?(netFacture/60)*rate:0; // salaire basé sur heures facturées uniquement
+
+  entries.push({
+    id:nid++,type:'interim',date,start,end,break:brk,
+    netMin:net,          // total heures travaillées
+    netWork:net,
+    netFacture,          // heures facturées (max 10h)
+    nonFacture,          // heures non facturées
+    travelMin:0,travelType:'',agency,site,km,cv,fraisKm,rate,sal
+  });
   save(); renderAll(); refreshLeave();
   const parts=['✓ Intérim '+dStr(date)];
-  if(sal>0) parts.push(hhmm(net)+' × '+rate.toFixed(2)+'€ = '+sal.toFixed(2)+'€ net');
+  if(sal>0) parts.push(hhmm(netFacture)+' facturées × '+rate.toFixed(2)+'€ = '+sal.toFixed(2)+'€ net');
+  if(nonFacture>0) parts.push(hhmm(nonFacture)+' non facturées');
   if(fraisKm>0) parts.push(fraisKm.toFixed(2)+'€ km');
   toast(parts.join(' · '));
   document.getElementById('i-site').value='';
@@ -1894,23 +1914,26 @@ function renderInterim(){
   let moisSal=0, moisH=0;
 
   tb.innerHTML=list.map(e=>{
+    const netF=e.netFacture!==undefined?e.netFacture:Math.min(e.netMin,10*60);
+    const nonF=e.nonFacture!==undefined?e.nonFacture:Math.max(0,e.netMin-10*60);
     const hs=e.netMin>DAY9?'<span class="badge b-red" style="margin-left:4px">HS</span>':'';
+    const nonFCell=nonF>0?`<span style="color:var(--acc);font-size:10px;">+${hhmm(nonF)}<br><small style="color:var(--tx3)">non fact.</small></span>`:'<span style="color:var(--tx3)">—</span>';
     const kmCell=e.fraisKm>0
       ?`<span style="color:var(--acc)">${e.fraisKm.toFixed(2)} €<br><small style="color:var(--tx3)">${(e.km||0)*2}km (${e.cv||5}CV)</small></span>`
       :'<span style="color:var(--tx3)">—</span>';
     const rate=e.rate||0;
-    const sal=rate>0?(e.netMin/60)*rate:0;
+    const sal=rate>0?(netF/60)*rate:0; // salaire sur heures facturées uniquement
     totH+=e.netMin; totSal+=sal; totKm+=(e.fraisKm||0);
-    // Cumul mois courant
     if(e.date.startsWith(curMonthSal)){ moisSal+=sal; moisH+=e.netMin; }
     return`<tr>
       <td>${dStr(e.date)}</td>
       <td style="color:var(--grn)">${e.start}</td>
       <td style="color:var(--red)">${e.end}</td>
-      <td>${hhmm(e.netMin)}${hs}</td>
+      <td>${hhmm(netF)}${hs}<br><small style="color:var(--tx3);font-size:9px;">/${hhmm(e.netMin)} total</small></td>
       <td style="color:var(--acc)">${rate>0?rate.toFixed(2)+' €/h':'<span style="color:var(--tx3)">—</span>'}</td>
-      <td style="color:var(--grn);font-weight:600">${sal>0?sal.toFixed(2)+' €<br><small style="color:var(--tx3);font-weight:400">'+hhmm(e.netMin)+'×'+rate.toFixed(0)+'€</small>':'<span style="color:var(--tx3)">—</span>'}</td>
+      <td style="color:var(--grn);font-weight:600">${sal>0?sal.toFixed(2)+' €<br><small style="color:var(--tx3);font-weight:400">'+hhmm(netF)+'×'+rate.toFixed(0)+'€</small>':'<span style="color:var(--tx3)">—</span>'}</td>
       <td>${kmCell}</td>
+      <td>${nonFCell}</td>
       <td><span class="badge b-acc">${e.agency||'—'}</span></td>
       <td style="color:var(--tx2)">${e.site||'—'}</td>
       <td><button class="btn bd" onclick="del(${e.id})">✕</button></td>
@@ -2143,8 +2166,216 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════
-//  FICHE DE PAIE — Import JSON + Firebase sync
+//  RÉCONCILIATION FICHE DE PAIE
 // ════════════════════════════════════════════
+
+// Convertit hh.mm (format fiche) en minutes
+function ficheToMin(val){
+  if(!val) return 0;
+  const h=Math.floor(val);
+  const m=Math.round((val-h)*100);
+  return h*60+m;
+}
+
+// Calcule la cagnotte RCR pour un mois donné (V4 style)
+function calcCagnotteForMonth(yr, moisNum){
+  const pad=n=>String(n).padStart(2,'0');
+  const monthStart=yr+'-'+pad(moisNum)+'-01';
+  const monthEnd=yr+'-'+pad(moisNum)+'-31';
+  const SITES_EXCLUS=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
+  const isSiteExclu=e=>(e.site||'').toLowerCase().split(' ').some(s=>SITES_EXCLUS.some(ex=>s.includes(ex.toLowerCase().split(' ')[0])));
+  const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
+
+  // Grouper par semaine les entrées du mois
+  const wkMap={};
+  entries.filter(e=>e.type==='work'&&e.date>=monthStart&&e.date<=monthEnd).forEach(e=>{
+    const w=isoWeek(e.date); if(!wkMap[w])wkMap[w]=true;
+  });
+
+  let t1=0,t2=0,totalTrajets=0;
+
+  Object.keys(wkMap).forEach(wk=>{
+    const allInWeek=entries.filter(e=>e.type==='work'&&isoWeek(e.date)===wk);
+    const hMois=allInWeek.filter(e=>e.date>=monthStart&&e.date<=monthEnd).reduce((a,e)=>a+(e.netWork||e.netMin),0);
+    const hHors=allInWeek.filter(e=>e.date<monthStart||e.date>monthEnd).reduce((a,e)=>a+(e.netWork||e.netMin),0);
+    if(hMois<hHors) return; // semaine majoritairement dans l'autre mois
+
+    const totSemaine=allInWeek.reduce((a,e)=>a+(e.netWork||e.netMin),0);
+
+    // Fériés chômés
+    const[yrN,wnN]=wk.split('-W').map(Number);
+    const jan4=new Date(yrN,0,4);
+    const monday=new Date(jan4);
+    monday.setDate(jan4.getDate()-(jan4.getDay()||7)+1+(wnN-1)*7);
+    let fc=0;
+    for(let d=0;d<5;d++){
+      const dt=new Date(monday); dt.setDate(monday.getDate()+d);
+      const ds=dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());
+      if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)) fc+=DAY7;
+      if(isJourSolidarite(ds)&&!workDates.has(ds)) fc+=DAY7;
+    }
+
+    const seuilEffectif=Math.max(0,W35-fc);
+    const hs=Math.max(0,totSemaine-seuilEffectif);
+    t1+=Math.max(0,Math.min(hs,W43-W35));
+    t2+=Math.max(0,hs-(W43-W35));
+
+    // Trajets hors Lamotte
+    totalTrajets+=allInWeek.reduce((a,e)=>a+(isSiteExclu(e)?0:(e.travelMin||0)),0);
+  });
+
+  const hsMaj=t1+Math.round(t1*0.25)+t2+Math.round(t2*0.5);
+  const hPayees=8*60;
+  const trajReste=Math.max(0,totalTrajets-hPayees);
+  const trajMaj=Math.round(trajReste*1.25);
+  return{t1,t2,hsMaj,totalTrajets,trajMaj,totalRCR:hsMaj+trajMaj};
+}
+
+// Fériés tombant sur un jour non travaillé CDI dans un mois donné
+function getFeriesNonCDI(yr, moisNum){
+  const pad=n=>String(n).padStart(2,'0');
+  const monthStart=yr+'-'+pad(moisNum)+'-01';
+  const monthEnd=yr+'-'+pad(moisNum)+'-31';
+  const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
+  const moisNames=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const ferieNames={
+    '-01-01':'Jour de l\'An','-05-01':'Fête du Travail','-05-08':'Victoire 1945',
+    '-07-14':'Fête Nationale','-08-15':'Assomption','-11-01':'Toussaint',
+    '-11-11':'Armistice','-12-25':'Noël'
+  };
+
+  const result=[];
+  // Parcourir tous les jours du mois
+  let d=new Date(yr,moisNum-1,1);
+  while(d.getMonth()===moisNum-1){
+    const ds=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    if(isFerie(ds)&&!workDates.has(ds)){
+      const dow=d.getDay();
+      // Vendredi (5), Samedi (6), Dimanche (0) = jours non CDI
+      if(dow===0||dow===5||dow===6){
+        const suffix='-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+        const nom=ferieNames[suffix]||'Jour férié';
+        result.push({date:ds,nom,dow});
+      }
+    }
+    d.setDate(d.getDate()+1);
+  }
+  return result;
+}
+
+// Ajouter des fériés WE dans les congés
+function addFeriesWEFromRecon(dates){
+  let added=0;
+  dates.forEach(date=>{
+    if(!entries.find(e=>e.type==='leave'&&e.date===date)){
+      entries.push({id:nid++,type:'leave',date,leaveType:'ferie_report',netMin:DAY7,note:'Récupération férié (accordé par employeur)',start:'—',end:'—'});
+      added++;
+    }
+  });
+  if(added>0){
+    save(); refreshLeave(); updateSummary();
+    toast('✅ '+added+' jour(s) férié(s) ajouté(s) à vos congés récupérables');
+  } else {
+    toast('Ces jours sont déjà dans vos congés','warn');
+  }
+}
+
+// Stocker le choix de réconciliation
+let reconChoices=JSON.parse(localStorage.getItem('cw4_recon')||'{}');
+function setReconSource(key, source, value){
+  reconChoices[key]={source, value, date:new Date().toISOString()};
+  localStorage.setItem('cw4_recon',JSON.stringify(reconChoices));
+  // Sync Firebase
+  if(DOC) DOC.update({reconChoices}).catch(e=>console.warn('Recon sync err:',e));
+  toast(source==='cw'?'🔵 ChronoWork sélectionné comme référence':'🟠 Fiche de paie sélectionnée comme référence');
+  // Réafficher la réconciliation
+  const paieActuelle=paieHistory.find(p=>document.getElementById('paie-titre').textContent.includes(p.periode));
+  if(paieActuelle) renderReconciliation(paieActuelle);
+}
+
+// Rendu de la réconciliation
+function renderReconciliation(paie){
+  const card=document.getElementById('paie-reconciliation-card');
+  const el=document.getElementById('paie-reconciliation');
+  if(!card||!el) return;
+
+  // Mois réglé par la fiche (mois précédent)
+  const moisHS=paie.mois_num===1?12:paie.mois_num-1;
+  const anneeHS=paie.mois_num===1?paie.annee-1:paie.annee;
+  const moisNames=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const moisLabel=moisNames[moisHS]+' '+anneeHS;
+  const reconKey=anneeHS+'-'+moisHS;
+
+  // Calcul ChronoWork pour ce mois
+  const cw=calcCagnotteForMonth(anneeHS,moisHS);
+
+  // Valeurs fiche de paie
+  const ficheCompteur=ficheToMin(paie.heures_supp_compteur||0);
+  const ficheRCR=ficheToMin(paie.rcr_acquis_mois||0);
+  const ficheTotal=ficheCompteur+ficheRCR;
+  const cwTotal=cw.totalRCR;
+  const ecart=cwTotal-ficheTotal;
+
+  // Choix actuel
+  const choix=reconChoices[reconKey]||{source:'cw',value:cwTotal};
+  const srcCW=choix.source==='cw';
+
+  // Fériés non comptabilisés
+  const feriesNonCDI=getFeriesNonCDI(anneeHS,moisHS);
+  const feriesDejaAjoutes=new Set(entries.filter(e=>e.type==='leave'&&e.leaveType==='ferie_report').map(e=>e.date));
+  const feriesAajouter=feriesNonCDI.filter(f=>!feriesDejaAjoutes.has(f.date));
+
+  let html=`<h4 style="font-size:12px;font-weight:700;color:rgba(255,255,255,.95);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Réconciliation — ${moisLabel}</h4>`;
+
+  // Section 1 : Fériés WE/vendredi non comptabilisés
+  if(feriesAajouter.length>0){
+    html+=`<div style="background:rgba(240,192,64,.08);border:1px solid rgba(240,192,64,.25);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--acc);margin-bottom:8px;">🎉 Jours fériés récupérables non comptabilisés</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.7);margin-bottom:8px;">Ces jours fériés tombaient sur un jour non travaillé — le DRH peut te les accorder :</div>`;
+    feriesAajouter.forEach(f=>{
+      const dowNames=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      html+=`<div style="font-size:11px;color:rgba(255,255,255,.85);padding:3px 0;">📅 ${dStr(f.date)} (${dowNames[f.dow]}) — ${f.nom}</div>`;
+    });
+    html+=`<button class="btn bi" onclick="addFeriesWEFromRecon(${JSON.stringify(feriesAajouter.map(f=>f.date))})" style="margin-top:10px;font-size:11px;width:100%;">
+      ✅ Ajouter à mes jours récupérables
+    </button></div>`;
+  } else if(feriesNonCDI.length>0){
+    html+=`<div style="background:rgba(74,240,176,.06);border:1px solid rgba(74,240,176,.2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--grn);">
+      🎉 Jours fériés récupérables : déjà comptabilisés ✅
+    </div>`;
+  }
+
+  // Section 2 : Cagnotte RCR
+  html+=`<div style="background:var(--sur2);border:1px solid var(--brd);border-radius:8px;padding:12px;margin-bottom:12px;">
+    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px;">📊 Cagnotte RCR — ${moisLabel}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--brd);">
+      <span style="font-size:11px;color:rgba(255,255,255,.7);">🔵 ChronoWork calcule</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blu);">${hhmm(cwTotal)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--brd);">
+      <span style="font-size:11px;color:rgba(255,255,255,.7);">🟠 Fiche de paie</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--acc);">${hhmm(ficheTotal)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;margin-bottom:10px;">
+      <span style="font-size:11px;color:${Math.abs(ecart)<60?'var(--grn)':'var(--red)'};">Écart</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:${Math.abs(ecart)<60?'var(--grn)':'var(--red)'};">${ecart>=0?'+':''}${hhmm(Math.abs(ecart))}</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="setReconSource('${reconKey}','cw',${cwTotal})" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};background:${srcCW?'rgba(66,133,244,.15)':'transparent'};color:${srcCW?'var(--blu)':'var(--tx3)'};">
+        ${srcCW?'✅ ':''}🔵 ChronoWork
+      </button>
+      <button onclick="setReconSource('${reconKey}','drh',${ficheTotal})" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};background:${!srcCW?'rgba(240,192,64,.15)':'transparent'};color:${!srcCW?'var(--acc)':'var(--tx3)'};">
+        ${!srcCW?'✅ ':''}🟠 Fiche de paie
+      </button>
+    </div>
+    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:8px;text-align:center;">
+      Valeur active dans le Bilan : <strong style="color:${srcCW?'var(--blu)':'var(--acc)'};">${srcCW?hhmm(cwTotal)+' (ChronoWork)':hhmm(ficheTotal)+' (fiche)'}</strong>
+    </div>
+  </div>`;
+
+  el.innerHTML=html;
+  card.style.display='block';
+}
 let paieHistory=JSON.parse(localStorage.getItem('cw4_paie')||'[]');
 function savePaieHistory(){
   localStorage.setItem('cw4_paie',JSON.stringify(paieHistory));
@@ -2218,6 +2449,7 @@ function displayPaie(paie){
   const hsTotal=(paie.heures_supp_25||0)+(paie.heures_supp_50||0);
   document.getElementById('paie-heures-sub').textContent=hsTotal>0?'HS +25%: '+(paie.heures_supp_25||0)+'h · HS +50%: '+(paie.heures_supp_50||0)+'h':'Pas de HS déclarées';
   renderComparaison(paie);
+  renderReconciliation(paie);
   renderCompteurAnnuel(paie);
   renderCumuls(paie);
 }
@@ -3116,9 +3348,9 @@ function genReport(){
       L.push('  Heures supplémentaires : aucune');
     }
 
-    // Récapitulatif V3 DRH
+    // Récapitulatif V4 Synthèse
     L.push(''); L.push(''); L.push(SEP);
-    L.push('  RÉCAPITULATIF V4 — SYNTHÈSE DRH');
+    L.push('  RÉCAPITULATIF V4 — SYNTHÈSE');
     L.push(SEP);
 
     // Lire les heures payées (champ modifiable, défaut 8h)
@@ -3173,16 +3405,28 @@ function genReport(){
     L.push('');L.push('');
     L.push('  JOURNÉES INTÉRIM'+agencyLabel);
     L.push(SEP);
-    L.push('  Jour                       Arrivée   Départ    Heures nettes');
-    L.push('  '+'-'.repeat(58));
-    let totHi=0;
+    L.push('  Jour                       Arrivée   Départ    Travaillé  Facturé   Non facturé');
+    L.push('  '+'-'.repeat(74));
+    let totHi=0, totFacture=0, totNonFacture=0;
     iList.forEach(e=>{
+      const netF=e.netFacture!==undefined?e.netFacture:Math.min(e.netMin,10*60);
+      const nonF=e.nonFacture!==undefined?e.nonFacture:Math.max(0,e.netMin-10*60);
       totHi+=e.netMin;
-      L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(e.netMin));
+      totFacture+=netF;
+      totNonFacture+=nonF;
+      const nonFStr=nonF>0?hhmm(nonF):'—';
+      L.push('  '+dStr(e.date).padEnd(28)+e.start.padEnd(10)+e.end.padEnd(10)+hhmm(e.netMin).padEnd(11)+hhmm(netF).padEnd(10)+nonFStr);
     });
-    L.push('  '+'-'.repeat(58));
+    L.push('  '+'-'.repeat(74));
     L.push('  Nombre de jours travaillés : '+iList.length+' j');
-    L.push('  Total heures du mois       : '+hhmm(totHi));
+    L.push('  Total heures travaillées   : '+hhmm(totHi));
+    L.push('  Total heures facturées     : '+hhmm(totFacture));
+    if(totNonFacture>0){
+      L.push('');
+      L.push('  ┌'+'-'.repeat(48)+'┐');
+      L.push('  │  HEURES NON FACTURÉES CE MOIS : '+hhmm(totNonFacture).padEnd(14)+'│');
+      L.push('  └'+'-'.repeat(48)+'┘');
+    }
   }
 
   // ── CONGÉS ──

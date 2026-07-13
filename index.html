@@ -2141,7 +2141,7 @@ function calcCagnotte(){
     // Pour Lamotte : si travelMin saisi par erreur, on l'exclut de la base HS
     const siteExclu=SITES_EXCLUS_HS.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()));
     const netTravail=siteExclu
-      ? Math.max(0,(e.netWork||e.netMin)-(e.travelMin||0))
+      ? (e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0)))
       : (e.netWork||e.netMin);
     if(isJourSolidarite(e.date)){
       wks[w].solidarite+=netTravail;
@@ -2428,7 +2428,7 @@ function calcCagnotteForMonth(yr, moisNum){
     const netWorkFn=e=>{
       const siteExclu=SITES_EXCLUS.some(s=>(e.site||'').toLowerCase().includes(s.toLowerCase().split(' ')[0]));
       // Pour Lamotte : si travel saisi, ne pas l'inclure dans la base HS
-      if(siteExclu) return Math.max(0,(e.netWork||e.netMin)-(e.travelMin||0));
+      if(siteExclu) return (e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0)));
       return e.netWork||e.netMin;
     };
     const hMois=allInWeek.filter(e=>e.date>=monthStart&&e.date<=monthEnd).reduce((a,e)=>a+netWorkFn(e),0);
@@ -3496,7 +3496,7 @@ function genReport(){
         // FAUTE B : exclure trajets Lamotte de la base HS
         wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>{
           const siteExclu=SITES_EXCLUS_TRAJET.some(s=>(e.site||'').toLowerCase().includes(s.toLowerCase().split(' ')[0]));
-          const net=siteExclu?Math.max(0,(e.netWork||e.netMin)-(e.travelMin||0)):(e.netWork||e.netMin);
+          const net=siteExclu?(e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0))):(e.netWork||e.netMin);
           return a+net;
         },0);
       } else {
@@ -3546,7 +3546,9 @@ function genReport(){
     let v3_t1=0, v3_t2=0, v3_trajets=0;
 
     Object.entries(wkMapRapport).sort().forEach(([wk,wE])=>{
-      const totPeriode=wE.reduce((a,e)=>a+e.netMin,0);
+      // Total affiché = heures réelles (netWork = sans trajet) pour les jours dans la période
+      const totAffiche=wE.reduce((a,e)=>a+(e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0))),0);
+      // Base HS = semaine complète (inclut jours hors période), sans trajets Lamotte
       const totSemaineComplete=wkMapFull[wk]||0;
       const ferieChome=ferieChomeByWk[wk]||0;
       const seuilEffectif=Math.max(0,W35-ferieChome);
@@ -3591,7 +3593,7 @@ function genReport(){
         L.push('  [⚡ Férié chômé cette semaine : +'+hhmm(ferieChome)+' assimilés → seuil HS : '+hhmm(seuilEffectif)+']');
       }
       L.push('  '+'-'.repeat(62));
-      L.push('  Total heures travaillées   : '+hhmm(totSemaineComplete));
+      L.push('  Total heures travaillées   : '+hhmm(totAffiche)); // heures réelles sans trajet
       if(trajetsSemaine>0)
         L.push('  Trajets                    : '+hhmm(trajetsSemaine));
 

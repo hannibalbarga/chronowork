@@ -389,6 +389,12 @@ select option{background:var(--sur2);}
     <div style="font-size:30px;margin-bottom:8px;">🌴</div>Aucun congé ce mois-ci<br>
     <small style="color:var(--tx3)">Cliquez "Voir tout" pour voir l'historique</small>
   </div>
+
+  <!-- CONTRÔLE RCR -->
+  <div class="card" id="rcr-controle-card" style="margin-top:12px;display:none;">
+    <h3><span class="dot" style="background:var(--acc)"></span>🔄 Contrôle du solde RCR</h3>
+    <div id="rcr-controle-body"></div>
+  </div>
 </div>
 
 <!-- ══════════ PANEL BILAN ══════════ -->
@@ -1170,6 +1176,7 @@ function go(name){
   document.querySelector('.tab.'+name).classList.add('active');
   document.getElementById('panel-'+name).classList.add('active');
   if(name==='summary') updateSummary();
+  if(name==='leave') renderRCRControle();
   if(name==='dashboard') renderDashboard();
   if(name==='history') renderHistory();
   if(name==='notif') renderNotifList();
@@ -2166,8 +2173,139 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════
-//  RÉCONCILIATION FICHE DE PAIE
+//  CONTRÔLE RCR — onglet Congés
 // ════════════════════════════════════════════
+function renderRCRControle(){
+  const card=document.getElementById('rcr-controle-card');
+  const body=document.getElementById('rcr-controle-body');
+  if(!card||!body) return;
+
+  // Récupérer les fiches de paie disponibles
+  const fiches=paieHistory.filter(p=>p.rcr_solde||p.rcr_acquis_mois).sort((a,b)=>
+    a.annee!==b.annee?a.annee-b.annee:a.mois_num-b.mois_num
+  );
+
+  if(!fiches.length){
+    card.style.display='none'; return;
+  }
+  card.style.display='block';
+
+  const moisNames=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+  // Cagnotte ChronoWork globale
+  const cag=calcCagnotte();
+  const cwSolde=cag.cagnotte; // solde global ChronoWork
+
+  // Récupérer le choix de réconciliation stocké
+  const reconChoicesStored=JSON.parse(localStorage.getItem('cw4_recon')||'{}');
+
+  // Fiche la plus récente pour le solde Repos R
+  const derniereFiche=fiches[fiches.length-1];
+  const ficheRCRSolde=derniereFiche.rcr_solde?ficheToMin(derniereFiche.rcr_solde):0;
+  const ficheLabel=moisNames[derniereFiche.mois_num]+' '+derniereFiche.annee;
+
+  // Calcul écart
+  const ecart=cwSolde-ficheRCRSolde;
+  const ecartPositif=ecart>=0;
+
+  // Choix actuel (clé globale)
+  const globalReconKey='global';
+  const globalChoix=reconChoicesStored[globalReconKey]||{source:'cw'};
+  let srcCW=globalChoix.source==='cw';
+  const soldeActif=srcCW?cwSolde:ficheRCRSolde;
+
+  let html=`
+  <!-- Double cagnotte -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div style="background:rgba(66,133,244,.1);border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:9px;font-weight:700;color:var(--blu);text-transform:uppercase;margin-bottom:4px;">🔵 ChronoWork (+25%/+50%)</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--blu);">${hhmm(cwSolde)}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:2px;">${Math.floor(cwSolde/DAY7)} jour(s) disponibles</div>
+      ${srcCW?'<div style="font-size:9px;color:var(--blu);margin-top:4px;font-weight:700;">✅ Référence active</div>':''}
+    </div>
+    <div style="background:rgba(240,192,64,.08);border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:9px;font-weight:700;color:var(--acc);text-transform:uppercase;margin-bottom:4px;">🟠 Fiche (tout +25%)</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--acc);">${hhmm(ficheRCRSolde)}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:2px;">${ficheLabel}</div>
+      ${!srcCW?'<div style="font-size:9px;color:var(--acc);margin-top:4px;font-weight:700;">✅ Référence active</div>':''}
+    </div>
+  </div>
+
+  <!-- Écart -->
+  <div style="background:rgba(${ecartPositif?'74,240,176':'240,64,128'},.06);border:1px solid rgba(${ecartPositif?'74,240,176':'240,64,128'},.2);border-radius:8px;padding:10px;margin-bottom:12px;text-align:center;">
+    <div style="font-size:10px;color:rgba(255,255,255,.7);margin-bottom:4px;">Écart ChronoWork − Fiche</div>
+    <div style="font-size:16px;font-weight:800;color:${ecartPositif?'var(--grn)':'var(--red)'};">${ecartPositif?'+':''}${hhmm(Math.abs(ecart))}</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;">${ecartPositif?'ChronoWork calcule plus (levier de réclamation)':'Fiche calcule plus'}</div>
+  </div>
+
+  <!-- Boutons choix -->
+  <div style="display:flex;gap:8px;margin-bottom:14px;">
+    <button onclick="setGlobalReconSource('cw')" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};background:${srcCW?'rgba(66,133,244,.15)':'transparent'};color:${srcCW?'var(--blu)':'rgba(255,255,255,.5)'};">
+      ${srcCW?'✅ ':''}🔵 Utiliser ChronoWork
+    </button>
+    <button onclick="setGlobalReconSource('fiche')" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};background:${!srcCW?'rgba(240,192,64,.15)':'transparent'};color:${!srcCW?'var(--acc)':'rgba(255,255,255,.5)'};">
+      ${!srcCW?'✅ ':''}🟠 Utiliser fiche
+    </button>
+  </div>`;
+
+  // Tableau de réconciliation mois par mois
+  html+=`<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Vérifications par mois (M-1)</div>`;
+  html+=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:10px;">
+    <thead><tr style="color:rgba(255,255,255,.5);font-size:9px;text-transform:uppercase;">
+      <th style="text-align:left;padding:4px;">Mois travail</th>
+      <th style="padding:4px;">RCR fiche</th>
+      <th style="padding:4px;">Vérif ×1.25</th>
+      <th style="padding:4px;">Solde fiche</th>
+      <th style="padding:4px;">✓</th>
+    </tr></thead><tbody>`;
+
+  let soldeN1=0;
+  fiches.forEach((fiche,idx)=>{
+    // RCR acquis = HS repos × 1.25
+    const rcr_acquis=ficheToMin(fiche.rcr_acquis_mois||0);
+    const hs_repos=ficheToMin(fiche.heures_supp_compteur||0);
+    const rcr_calcule=Math.round(hs_repos*1.25);
+    const rcr_ok=Math.abs(rcr_acquis-rcr_calcule)<5; // tolérance 5 min
+
+    // Solde = solde N-1 + acquis - posés
+    const reposP=entries.filter(e=>e.type==='leave'&&e.leaveType==='repos'&&
+      e.date.startsWith(fiche.annee+'-'+String(fiche.mois_num).padStart(2,'0'))).length;
+    const soldeCalcule=soldeN1+rcr_acquis-(reposP*DAY7);
+    const solde_fiche=ficheToMin(fiche.rcr_solde||0);
+    const solde_ok=Math.abs(soldeCalcule-solde_fiche)<30;
+
+    const moisTravail=fiche.mois_num===1?
+      moisNames[12]+' '+(fiche.annee-1):
+      moisNames[fiche.mois_num-1]+' '+fiche.annee;
+
+    html+=`<tr style="border-top:1px solid var(--brd);">
+      <td style="padding:5px;color:rgba(255,255,255,.8);">${moisTravail}<br><small style="color:rgba(255,255,255,.4);">fiche ${moisNames[fiche.mois_num]}</small></td>
+      <td style="padding:5px;text-align:center;font-family:'DM Mono',monospace;">${hhmm(rcr_acquis)}</td>
+      <td style="padding:5px;text-align:center;font-family:'DM Mono',monospace;color:${rcr_ok?'var(--grn)':'var(--red)'};">${hhmm(rcr_calcule)}</td>
+      <td style="padding:5px;text-align:center;font-family:'DM Mono',monospace;">${hhmm(solde_fiche)}</td>
+      <td style="padding:5px;text-align:center;">${rcr_ok&&solde_ok?'✅':'⚠️'}</td>
+    </tr>`;
+    soldeN1=solde_fiche;
+  });
+
+  html+=`</tbody></table></div>`;
+
+  // Note légale
+  html+=`<div style="margin-top:10px;font-size:10px;color:rgba(255,255,255,.5);line-height:1.5;">
+    ⚖️ <strong style="color:rgba(255,255,255,.7);">Levier de réclamation :</strong> L'écart ChronoWork − Fiche correspond aux heures >43h/semaine majorées à +50% au lieu de +25%. Chaque heure au-delà de 43h vous doit 0,25h de RCR supplémentaire.
+  </div>`;
+
+  body.innerHTML=html;
+}
+
+function setGlobalReconSource(source){
+  const reconChoicesStored=JSON.parse(localStorage.getItem('cw4_recon')||'{}');
+  reconChoicesStored['global']={source, date:new Date().toISOString()};
+  localStorage.setItem('cw4_recon',JSON.stringify(reconChoicesStored));
+  if(DOC) DOC.update({reconChoices:reconChoicesStored}).catch(()=>{});
+  renderRCRControle();
+  toast(source==='cw'?'🔵 ChronoWork sélectionné comme référence active':'🟠 Fiche de paie sélectionnée comme référence active');
+}
 
 // Convertit hh.mm (format fiche) en minutes
 function ficheToMin(val){
@@ -2299,83 +2437,93 @@ function renderReconciliation(paie){
   const el=document.getElementById('paie-reconciliation');
   if(!card||!el) return;
 
-  // Mois réglé par la fiche (mois précédent)
+  // Mois réglé par la fiche (règle M-1)
   const moisHS=paie.mois_num===1?12:paie.mois_num-1;
   const anneeHS=paie.mois_num===1?paie.annee-1:paie.annee;
   const moisNames=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
   const moisLabel=moisNames[moisHS]+' '+anneeHS;
   const reconKey=anneeHS+'-'+moisHS;
 
-  // Calcul ChronoWork pour ce mois
-  const cw=calcCagnotteForMonth(anneeHS,moisHS);
+  // ── Comparaison MENSUELLE ──
+  const cwMois=calcCagnotteForMonth(anneeHS,moisHS);
+  const cwMensuel=cwMois.totalRCR;
+  const ficheMensuel=ficheToMin(paie.rcr_acquis_mois||0); // RCR acquis CE mois (majoré)
+  const ecartMensuel=cwMensuel-ficheMensuel;
 
-  // Valeurs fiche de paie
-  const ficheCompteur=ficheToMin(paie.heures_supp_compteur||0);
-  const ficheRCR=ficheToMin(paie.rcr_acquis_mois||0);
-  const ficheTotal=ficheCompteur+ficheRCR;
-  const cwTotal=cw.totalRCR;
-  const ecart=cwTotal-ficheTotal;
+  // ── Comparaison CUMULÉE ──
+  const cagGlobal=calcCagnotte();
+  const cwCumul=cagGlobal.cagnotte;
+  const ficheCumul=ficheToMin(paie.rcr_solde||paie.rcr_acquis||0);
+  const ecartCumul=cwCumul-ficheCumul;
 
-  // Choix actuel
-  const choix=reconChoices[reconKey]||{source:'cw',value:cwTotal};
-  const srcCW=choix.source==='cw';
+  // ── Choix actuel ──
+  const reconChoicesLocal=JSON.parse(localStorage.getItem('cw4_recon')||'{}');
+  const choixMois=reconChoicesLocal[reconKey]||{source:'cw'};
+  let srcCW_recon=choixMois.source==='cw';
 
-  // Fériés non comptabilisés
+  // ── Fériés WE non comptabilisés ──
   const feriesNonCDI=getFeriesNonCDI(anneeHS,moisHS);
   const feriesDejaAjoutes=new Set(entries.filter(e=>e.type==='leave'&&e.leaveType==='ferie_report').map(e=>e.date));
   const feriesAajouter=feriesNonCDI.filter(f=>!feriesDejaAjoutes.has(f.date));
 
-  let html=`<h4 style="font-size:12px;font-weight:700;color:rgba(255,255,255,.95);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Réconciliation — ${moisLabel}</h4>`;
+  let htmlRecon=`<h4 style="font-size:12px;font-weight:700;color:rgba(255,255,255,.95);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Réconciliation — ${moisLabel}</h4>`;
 
-  // Section 1 : Fériés WE/vendredi non comptabilisés
+  // Section 1 : Fériés WE non comptabilisés
   if(feriesAajouter.length>0){
-    html+=`<div style="background:rgba(240,192,64,.08);border:1px solid rgba(240,192,64,.25);border-radius:8px;padding:12px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;color:var(--acc);margin-bottom:8px;">🎉 Jours fériés récupérables non comptabilisés</div>
-      <div style="font-size:10px;color:rgba(255,255,255,.7);margin-bottom:8px;">Ces jours fériés tombaient sur un jour non travaillé — le DRH peut te les accorder :</div>`;
+    htmlRecon+=`<div style="background:rgba(240,192,64,.08);border:1px solid rgba(240,192,64,.25);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--acc);margin-bottom:8px;">🎉 Jours fériés récupérables non comptabilisés</div>`;
     feriesAajouter.forEach(f=>{
       const dowNames=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-      html+=`<div style="font-size:11px;color:rgba(255,255,255,.85);padding:3px 0;">📅 ${dStr(f.date)} (${dowNames[f.dow]}) — ${f.nom}</div>`;
+      htmlRecon+=`<div style="font-size:11px;color:rgba(255,255,255,.85);padding:3px 0;">📅 ${dStr(f.date)} (${dowNames[f.dow]}) — ${f.nom}</div>`;
     });
-    html+=`<button class="btn bi" onclick="addFeriesWEFromRecon(${JSON.stringify(feriesAajouter.map(f=>f.date))})" style="margin-top:10px;font-size:11px;width:100%;">
-      ✅ Ajouter à mes jours récupérables
-    </button></div>`;
+    htmlRecon+=`<button class="btn bi" onclick="addFeriesWEFromRecon(${JSON.stringify(feriesAajouter.map(f=>f.date))})" style="margin-top:10px;font-size:11px;width:100%;">✅ Ajouter à mes jours récupérables</button></div>`;
   } else if(feriesNonCDI.length>0){
-    html+=`<div style="background:rgba(74,240,176,.06);border:1px solid rgba(74,240,176,.2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--grn);">
-      🎉 Jours fériés récupérables : déjà comptabilisés ✅
-    </div>`;
+    htmlRecon+=`<div style="background:rgba(74,240,176,.06);border:1px solid rgba(74,240,176,.2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--grn);">🎉 Jours fériés récupérables : déjà comptabilisés ✅</div>`;
   }
 
-  // Section 2 : Cagnotte RCR
-  html+=`<div style="background:var(--sur2);border:1px solid var(--brd);border-radius:8px;padding:12px;margin-bottom:12px;">
-    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px;">📊 Cagnotte RCR — ${moisLabel}</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--brd);">
-      <span style="font-size:11px;color:rgba(255,255,255,.7);">🔵 ChronoWork calcule</span>
-      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blu);">${hhmm(cwTotal)}</span>
+  // Section 2 : Comparaison MENSUELLE
+  htmlRecon+=`<div style="background:var(--sur2);border:1px solid var(--brd);border-radius:8px;padding:12px;margin-bottom:12px;">
+    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px;">📊 RCR acquis — ${moisLabel} (mensuel)</div>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--brd);">
+      <span style="font-size:11px;color:rgba(255,255,255,.7);">🔵 ChronoWork (V4)</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blu);">${hhmm(cwMensuel)}</span>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--brd);">
-      <span style="font-size:11px;color:rgba(255,255,255,.7);">🟠 Fiche de paie</span>
-      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--acc);">${hhmm(ficheTotal)}</span>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--brd);">
+      <span style="font-size:11px;color:rgba(255,255,255,.7);">🟠 Fiche (rcr acquis mois)</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--acc);">${hhmm(ficheMensuel)}</span>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;margin-bottom:10px;">
-      <span style="font-size:11px;color:${Math.abs(ecart)<60?'var(--grn)':'var(--red)'};">Écart</span>
-      <span style="font-family:'DM Mono',monospace;font-weight:700;color:${Math.abs(ecart)<60?'var(--grn)':'var(--red)'};">${ecart>=0?'+':''}${hhmm(Math.abs(ecart))}</span>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;margin-bottom:10px;">
+      <span style="font-size:11px;color:${Math.abs(ecartMensuel)<60?'var(--grn)':'var(--red)'};">Écart mensuel</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:${Math.abs(ecartMensuel)<60?'var(--grn)':'var(--red)'};">${ecartMensuel>=0?'+':''}${hhmm(Math.abs(ecartMensuel))}</span>
     </div>
     <div style="display:flex;gap:8px;">
-      <button onclick="setReconSource('${reconKey}','cw',${cwTotal})" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};background:${srcCW?'rgba(66,133,244,.15)':'transparent'};color:${srcCW?'var(--blu)':'var(--tx3)'};">
-        ${srcCW?'✅ ':''}🔵 ChronoWork
-      </button>
-      <button onclick="setReconSource('${reconKey}','drh',${ficheTotal})" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};background:${!srcCW?'rgba(240,192,64,.15)':'transparent'};color:${!srcCW?'var(--acc)':'var(--tx3)'};">
-        ${!srcCW?'✅ ':''}🟠 Fiche de paie
-      </button>
+      <button onclick="setReconSource('${reconKey}','cw',${cwMensuel})" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${srcCW_recon?'var(--blu)':'var(--brd)'};background:${srcCW_recon?'rgba(66,133,244,.15)':'transparent'};color:${srcCW_recon?'var(--blu)':'rgba(255,255,255,.5)'};">${srcCW_recon?'✅ ':''}🔵 ChronoWork</button>
+      <button onclick="setReconSource('${reconKey}','drh',${ficheMensuel})" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${!srcCW_recon?'var(--acc)':'var(--brd)'};background:${!srcCW_recon?'rgba(240,192,64,.15)':'transparent'};color:${!srcCW_recon?'var(--acc)':'rgba(255,255,255,.5)'};">${!srcCW_recon?'✅ ':''}🟠 Fiche</button>
     </div>
-    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:8px;text-align:center;">
-      Valeur active dans le Bilan : <strong style="color:${srcCW?'var(--blu)':'var(--acc)'};">${srcCW?hhmm(cwTotal)+' (ChronoWork)':hhmm(ficheTotal)+' (fiche)'}</strong>
+    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:8px;text-align:center;">Valeur active : <strong style="color:${srcCW_recon?'var(--blu)':'var(--acc)'};">${srcCW_recon?hhmm(cwMensuel)+' (ChronoWork)':hhmm(ficheMensuel)+' (fiche)'}</strong></div>
+  </div>
+
+  <!-- Section 3 : Comparaison CUMULÉE -->
+  <div style="background:var(--sur2);border:1px solid var(--brd);border-radius:8px;padding:12px;">
+    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px;">📈 Solde RCR cumulé (total)</div>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--brd);">
+      <span style="font-size:11px;color:rgba(255,255,255,.7);">🔵 ChronoWork (solde restant)</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blu);">${hhmm(cwCumul)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--brd);">
+      <span style="font-size:11px;color:rgba(255,255,255,.7);">🟠 Fiche (solde cumulé)</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--acc);">${hhmm(ficheCumul)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;">
+      <span style="font-size:11px;color:${Math.abs(ecartCumul)<60?'var(--grn)':'var(--red)'};">Écart cumulé</span>
+      <span style="font-family:'DM Mono',monospace;font-weight:700;color:${Math.abs(ecartCumul)<60?'var(--grn)':'var(--red)'};">${ecartCumul>=0?'+':''}${hhmm(Math.abs(ecartCumul))}</span>
     </div>
   </div>`;
 
-  el.innerHTML=html;
+  el.innerHTML=htmlRecon;
   card.style.display='block';
 }
+
 let paieHistory=JSON.parse(localStorage.getItem('cw4_paie')||'[]');
 function savePaieHistory(){
   localStorage.setItem('cw4_paie',JSON.stringify(paieHistory));

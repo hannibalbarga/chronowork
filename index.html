@@ -144,6 +144,7 @@ select option{background:var(--sur2);}
   <div class="logo">Chrono<span>Work</span><small>CDI · Intérim · Congés · HS</small></div>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <div class="wkbadge"><strong id="wk-label">—</strong>Semaine en cours</div>
+    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.5 — 13/07/2026</div>
     <div id="sync-status" style="font-size:9px;color:var(--tx3);">⏳ Connexion…</div>
     <button id="sync-retry-btn" onclick="retrySyncNow()" style="display:none;font-size:9px;background:rgba(240,192,64,.15);border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:2px 6px;cursor:pointer;margin-top:2px;">🔄 Reconnecter</button>
   </div>
@@ -1788,16 +1789,17 @@ function showCPDetail(){
   let mois=(today.getFullYear()-start.getFullYear())*12+(today.getMonth()-start.getMonth());
   if(today.getDate()<start.getDate()) mois=Math.max(0,mois-1);
   const cpAcquis=calcCPAcquis();
+  const cpSolidarite=calcSolidariteCPDeduits();
   const dateCompl=new Date(start); dateCompl.setFullYear(start.getFullYear()+1);
   const cpPoses=entries.filter(e=>e.type==='leave'&&e.leaveType==='cp');
   const cpN=cpPoses.length;
-  const cpDispo=Math.max(0,cpAcquis-cpN);
+  const cpDispo=Math.max(0,cpAcquis-cpN-cpSolidarite);
 
   let html=`
     <div style="background:rgba(167,139,250,.08);border-radius:8px;padding:10px;margin-bottom:10px;">
       <div style="font-weight:700;color:var(--pur);margin-bottom:6px;">📋 Règle légale</div>
       Embauche : <strong>${new Date(CP_START).toLocaleDateString('fr-FR')}</strong><br>
-      Cumul : <strong>2,08 j/mois</strong> travaillé (= 25 j ÷ 12 mois)<br>
+      Cumul : <strong>2,5 j/mois</strong> travaillé (convention IDCC 1147)<br>
       30 jours acquis au total le : <strong>${dateCompl.toLocaleDateString('fr-FR')}</strong>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
@@ -1814,12 +1816,16 @@ function showCPDetail(){
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--acc)">${cpN} j</div>
       </div>
     </div>
+    ${cpSolidarite>0?`<div style="background:rgba(240,192,64,.08);border:1px solid rgba(240,192,64,.25);border-radius:8px;padding:8px;margin-bottom:10px;font-size:11px;">
+      ⚡ <strong style="color:var(--acc);">Journée de Solidarité</strong> : −${cpSolidarite} CP déduit(s) automatiquement
+      <br><small style="color:rgba(255,255,255,.5);">(${cpSolidarite===1?getJourSolidarite(2026):'une fois par an'} — règle légale)</small>
+    </div>`:''}
     <div style="background:rgba(167,139,250,.12);border:1px solid var(--pur);border-radius:8px;padding:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
       <span style="font-weight:700;">✅ Solde disponible</span>
       <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${cpDispo<2?'var(--red)':'var(--pur)'};">${cpDispo} j</span>
     </div>
     <div style="font-size:10px;color:var(--tx3);">
-      Calcul : ${cpAcquis} j acquis − ${cpN} j posés = <strong style="color:var(--pur);">${cpDispo} j disponibles</strong><br>
+      Calcul : ${cpAcquis} j acquis − ${cpN} j posés${cpSolidarite>0?' − '+cpSolidarite+' j solidarité':''} = <strong style="color:var(--pur);">${cpDispo} j disponibles</strong><br>
       ${cpDispo<2?'⚠️ Solde faible !':cpAcquis<25?'📈 Tu accumules encore des CP jusqu\'au 05/01/2027.':'✓ Tous tes CP sont acquis.'}
     </div>`;
 
@@ -2002,7 +2008,7 @@ function renderLeave(){
   tb.innerHTML=sorted.map(e=>{
     const isRepos=e.leaveType==='repos';
     return`<tr style="${isRepos?'background:rgba(167,139,250,.05)':''}">
-      <td>${dStr(e.date)}</td>
+      <td>${dStr(e.date)}${statutBadge(e.statut)}</td>
       <td><span class="badge b-pur">${LEAVE_LBL[e.leaveType]||e.leaveType}</span></td>
       <td style="color:var(--tx2)">${e.note||'—'}</td>
       <td><button class="btn bd" onclick="del(${e.id})" title="Supprimer ce jour">✕</button></td>
@@ -2029,19 +2035,33 @@ function getAllFeriesWERecuperables(){
 }
 
 function calcCPAcquis(){
-  // CP acquis depuis l'embauche (2,08 j/mois, max 25)
+  // CP acquis depuis l'embauche (2,5 j/mois, max 30)
   const start=new Date('2026-01-05');
   const today=new Date();
   let mois=(today.getFullYear()-start.getFullYear())*12+(today.getMonth()-start.getMonth());
   if(today.getDate()<start.getDate()) mois=Math.max(0,mois-1);
-  return Math.min(CP_TOTAL, Math.floor(mois*2.5*10)/10); // 2.5j/mois convention IDCC 1147
+  return Math.min(CP_TOTAL, Math.floor(mois*2.5*10)/10);
+}
+
+// Nombre de CP automatiquement déduits pour Journée de Solidarité
+function calcSolidariteCPDeduits(){
+  const today=fmtD(new Date());
+  const startYear=2026;
+  const currentYear=new Date().getFullYear();
+  let count=0;
+  for(let yr=startYear; yr<=currentYear; yr++){
+    const jourSol=getJourSolidarite(yr);
+    if(jourSol<=today) count++;
+  }
+  return count; // 1 CP par année depuis l'embauche
 }
 
 function refreshLeave(){
   const lList=entries.filter(e=>e.type==='leave');
   const cpN=lList.filter(e=>e.leaveType==='cp').length;
   const cpAcquis=calcCPAcquis();
-  const cpDispo=Math.max(0,cpAcquis-cpN); // CP acquis moins ceux posés
+  const cpSolidarite=calcSolidariteCPDeduits(); // 1 CP par an (Journée Solidarité)
+  const cpDispo=Math.max(0,cpAcquis-cpN-cpSolidarite);
   const cag=calcCagnotte();
   const feriesWE=getAllFeriesWERecuperables();
   const ferPoses=lList.filter(e=>e.leaveType==='ferie_report').length;
@@ -2057,7 +2077,7 @@ function refreshLeave(){
     cpEl.textContent=cpDispo+(cpDispo>1?' jours':' jour');
     cpEl.style.color=cpDispo<2?'var(--red)':cpDispo<5?'var(--acc)':'var(--pur)';
   }
-  if(cpSubEl) cpSubEl.textContent=cpN+' posé(s) / '+cpAcquis+' acquis · ↙ détail';
+  if(cpSubEl) cpSubEl.textContent=cpN+' posé(s)'+(cpSolidarite>0?' + '+cpSolidarite+' solidarité':'')+' / '+cpAcquis+' acquis · ↙ détail';
   if(hsEl){ hsEl.textContent=hhmm(cag.cagnotte); hsEl.style.color=cag.cagnotte>0?'var(--red)':'var(--tx3)'; }
   if(ferDispoEl){ ferDispoEl.textContent=feriesWE.length+(feriesWE.length>1?' jours':' jour')+' ('+ferRest+(ferRest>1?' restants':' restant')+')'; ferDispoEl.style.color=ferRest>0?'var(--acc)':'var(--tx3)'; }
   if(ferPosesEl){ ferPosesEl.textContent=ferPoses+(ferPoses>1?' jours posés':' jour posé'); }
@@ -2145,23 +2165,14 @@ function calcCagnotte(){
   const s2Maj=Math.round(s2Real*0.5);
   const hsMajBrut=s1Real+s1Maj+s2Real+s2Maj;
 
-  // Déduction automatique Journée de Solidarité (7h par an depuis l'embauche)
-  // Le lundi de Pentecôte est chômé mais 7h sont prélevées sur la cagnotte HS
-  const startYear=2026; // année d'embauche
-  const currentYear=new Date().getFullYear();
-  let solidariteDeduction=0;
-  for(let yr=startYear; yr<=currentYear; yr++){
-    const jourSol=getJourSolidarite(yr);
-    // Ne déduire que si la date est passée
-    if(jourSol<=fmtD(new Date())){
-      solidariteDeduction+=DAY7; // 7h = 420 min
-    }
-  }
+  // Journée de Solidarité → déduit 1 CP (pas des HS)
+  // Le comptage est fait dans calcCPSolde()
+  const solidariteDeduction=0; // plus de déduction HS
 
-  // Repos compensateur posés + Journée de Solidarité
+  // Repos compensateur posés
   const rcN=entries.filter(e=>e.type==='leave'&&e.leaveType==='repos').length;
   const reposMin=rcN*DAY7;
-  const totalDeduction=reposMin+solidariteDeduction;
+  const totalDeduction=reposMin; // solidarité plus déductible des HS
 
   // Cagnotte nette
   const cagnotte=Math.max(0,hsMajBrut-totalDeduction);
@@ -2173,8 +2184,117 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════
-//  CONTRÔLE RCR — onglet Congés
+//  STATUT CYCLE DE VIE DES SAISIES
+//  prévu → à_vérifier → validé / écart
+//  Version : V4.5 — 13/07/2026
 // ════════════════════════════════════════════
+
+// Statuts possibles
+const STATUT = { PREVU:'prevu', A_VERIFIER:'a_verifier', VALIDE:'valide', ECART:'ecart' };
+const STATUT_LABEL = { prevu:'🟡 Prévu', a_verifier:'🔵 À vérifier', valide:'✅ Validé', ecart:'⚠️ Écart' };
+const STATUT_COLOR = { prevu:'var(--acc)', a_verifier:'var(--blu)', valide:'var(--grn)', ecart:'var(--red)' };
+
+// Tolérance d'arrondi Excel (~33 min)
+const TOLERANCE_MIN = 35;
+
+// Validation des saisies contre les fiches de paie importées
+// Règle M-1 :
+//   CP/fériés/RC posés → vérifiés dans fiche du MÊME mois (items planifiés)
+//   HS travaillées     → vérifiées dans fiche du mois SUIVANT (items réalisés)
+function validateEntriesAgainstFiches(){
+  if(!paieHistory.length) return;
+  const pad=n=>String(n).padStart(2,'0');
+  let modified=false;
+
+  // ── 1. Validation CP posés ──
+  // Règle : CP posés en mois X → fiche mois X → champ cp_pris
+  const moisAvecFiche=new Set(paieHistory.map(p=>p.annee+'-'+pad(p.mois_num)));
+
+  entries.filter(e=>e.type==='leave'&&e.leaveType==='cp').forEach(e=>{
+    const mois=e.date.substring(0,7); // YYYY-MM
+    const ficheKey=mois;
+    if(!moisAvecFiche.has(ficheKey)){
+      if(e.statut!==STATUT.PREVU){ e.statut=STATUT.PREVU; modified=true; }
+      return;
+    }
+    // Fiche disponible → passer à "à vérifier" ou valider
+    const [yr,mo]=mois.split('-').map(Number);
+    const fiche=paieHistory.find(p=>p.annee===yr&&p.mois_num===mo);
+    if(!fiche){ e.statut=STATUT.PREVU; return; }
+
+    // Compter tous les CP posés dans ce mois
+    const cpPosesMois=entries.filter(x=>x.type==='leave'&&x.leaveType==='cp'&&x.date.startsWith(mois)).length;
+    const cpFiche=fiche.cp_pris||0;
+
+    if(Math.abs(cpPosesMois-cpFiche)<0.6){ // tolérance 0.5j
+      if(e.statut!==STATUT.VALIDE){ e.statut=STATUT.VALIDE; modified=true; }
+    } else {
+      if(e.statut!==STATUT.ECART){ e.statut=STATUT.ECART; modified=true; }
+    }
+  });
+
+  // ── 2. Validation RC posés ──
+  // Règle : RC posés en mois X → fiche mois X → champ rcr_pris
+  entries.filter(e=>e.type==='leave'&&e.leaveType==='repos').forEach(e=>{
+    const mois=e.date.substring(0,7);
+    if(!moisAvecFiche.has(mois)){
+      if(e.statut!==STATUT.PREVU){ e.statut=STATUT.PREVU; modified=true; }
+      return;
+    }
+    const [yr,mo]=mois.split('-').map(Number);
+    const fiche=paieHistory.find(p=>p.annee===yr&&p.mois_num===mo);
+    if(!fiche){ e.statut=STATUT.PREVU; return; }
+
+    const rcPosesMois=entries.filter(x=>x.type==='leave'&&x.leaveType==='repos'&&x.date.startsWith(mois)).length*DAY7;
+    const rcFiche=ficheToMin(fiche.rcr_pris||0);
+
+    if(rcFiche===0&&rcPosesMois>0){
+      if(e.statut!==STATUT.A_VERIFIER){ e.statut=STATUT.A_VERIFIER; modified=true; }
+    } else if(Math.abs(rcPosesMois-rcFiche)<=TOLERANCE_MIN){
+      if(e.statut!==STATUT.VALIDE){ e.statut=STATUT.VALIDE; modified=true; }
+    } else {
+      if(e.statut!==STATUT.ECART){ e.statut=STATUT.ECART; modified=true; }
+    }
+  });
+
+  // ── 3. Fériés récupérables posés ──
+  // Règle : ferie_report posé en mois X → fiche mois X → champ jf_recup_pris
+  // Traités comme des CP (salaire maintenu)
+  entries.filter(e=>e.type==='leave'&&e.leaveType==='ferie_report').forEach(e=>{
+    const mois=e.date.substring(0,7);
+    if(!moisAvecFiche.has(mois)){
+      if(e.statut!==STATUT.PREVU){ e.statut=STATUT.PREVU; modified=true; }
+      return;
+    }
+    const [yr,mo]=mois.split('-').map(Number);
+    const fiche=paieHistory.find(p=>p.annee===yr&&p.mois_num===mo);
+    if(!fiche){ e.statut=STATUT.PREVU; return; }
+
+    const jfPosesMois=entries.filter(x=>x.type==='leave'&&x.leaveType==='ferie_report'&&x.date.startsWith(mois)).length;
+    const jfFiche=fiche.jf_recup_pris||0;
+
+    if(jfFiche===0&&jfPosesMois>0){
+      if(e.statut!==STATUT.A_VERIFIER){ e.statut=STATUT.A_VERIFIER; modified=true; }
+    } else if(Math.abs(jfPosesMois-jfFiche)<0.6){
+      if(e.statut!==STATUT.VALIDE){ e.statut=STATUT.VALIDE; modified=true; }
+    } else {
+      if(e.statut!==STATUT.ECART){ e.statut=STATUT.ECART; modified=true; }
+    }
+  });
+
+  // ── 4. HS travaillées (M+1) ──
+  // ⚠️ Géré via renderReconciliation dans l'onglet Fiche de paie
+  // La validation des HS n'est pas sur les entrées individuelles
+  // mais sur le total mensuel (voir tab Fiche de paie)
+
+  if(modified){ save(); renderAll(); refreshLeave(); }
+}
+
+// Indicateur visuel statut dans les tableaux
+function statutBadge(statut){
+  if(!statut||statut===STATUT.PREVU) return '';
+  return `<span style="font-size:8px;padding:1px 4px;border-radius:3px;background:${STATUT_COLOR[statut]}22;color:${STATUT_COLOR[statut]};border:1px solid ${STATUT_COLOR[statut]}44;margin-left:4px;">${STATUT_LABEL[statut]||statut}</span>`;
+}
 function renderRCRControle(){
   const card=document.getElementById('rcr-controle-card');
   const body=document.getElementById('rcr-controle-body');
@@ -2517,6 +2637,7 @@ function importPaieData(fiches){
   renderPaieHistorique();
   const last=fiches[fiches.length-1];
   if(last) displayPaie(last);
+  validateEntriesAgainstFiches(); // Mise à jour des statuts
   toast('✓ '+fiches.length+' fiche(s) importée(s)');
 }
 

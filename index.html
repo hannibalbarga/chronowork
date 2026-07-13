@@ -2026,12 +2026,29 @@ function getFeriesWE(yr){
     return dow===0||dow===6;
   }).sort();
 }
+// Retourne tous les jours fériés tombant sur des jours non-CDI (ven/sam/dim)
+// = jours récupérables selon art. 39 IDCC 1147
 function getAllFeriesWERecuperables(){
   const years=new Set(entries.map(e=>e.date.substring(0,4)));
-  years.add(String(new Date().getFullYear())); // année en cours uniquement
+  years.add(String(new Date().getFullYear()));
   const all=[];
-  years.forEach(yr=>getFeriesWE(yr).forEach(d=>all.push(d)));
+  years.forEach(yr=>{
+    // Chercher tous les fériés de l'année
+    const feriesAn=feries(parseInt(yr));
+    feriesAn.forEach(ds=>{
+      const dow=new Date(ds+'T12:00').getDay();
+      // Non-CDI = vendredi(5), samedi(6), dimanche(0)
+      if(dow===0||dow===5||dow===6) all.push(ds);
+    });
+  });
   return [...new Set(all)].sort();
+}
+
+// Calcule le nombre de JF Récup acquis depuis l'embauche (fériés non-CDI passés)
+function calcJFRecupAcquis(){
+  const today=fmtD(new Date());
+  const feriesDispo=getAllFeriesWERecuperables();
+  return feriesDispo.filter(d=>d>='2026-01-05'&&d<=today).length;
 }
 
 function calcCPAcquis(){
@@ -2114,12 +2131,18 @@ function calcCagnotte(){
   // Les trajets génèrent une contrepartie séparée
 
   const wks={};
+  const SITES_EXCLUS_HS=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
 
   // 1. Heures réellement travaillées SANS les trajets
+  // FAUTE B FIX : pour Lamotte (site référence), exclure aussi les trajets saisis de la base HS
   entries.filter(e=>e.type==='work').forEach(e=>{
     const w=isoWeek(e.date);
     if(!wks[w]) wks[w]={work:0, ferieChome:0, solidarite:0};
-    const netTravail=e.netWork||e.netMin; // netWork = sans trajet, fallback netMin
+    // Pour Lamotte : si travelMin saisi par erreur, on l'exclut de la base HS
+    const siteExclu=SITES_EXCLUS_HS.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()));
+    const netTravail=siteExclu
+      ? Math.max(0,(e.netWork||e.netMin)-(e.travelMin||0))
+      : (e.netWork||e.netMin);
     if(isJourSolidarite(e.date)){
       wks[w].solidarite+=netTravail;
     } else {
@@ -2127,7 +2150,8 @@ function calcCagnotte(){
     }
   });
 
-  // 2. Jours fériés chômés → assimilés comme temps effectif (abaisse le seuil 35h)
+  // 2. Jours fériés chômés → abaissent le seuil 35h UNIQUEMENT si tombent un jour CDI (lun-jeu)
+  // Fériés vendredi/samedi/dimanche → compteur JF Récup (chantier 3), PAS en réduction de seuil
   const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
   const weeksWithWork=new Set(Object.keys(wks));
   weeksWithWork.forEach(w=>{
@@ -2139,9 +2163,16 @@ function calcCagnotte(){
       const dt=new Date(monday);
       dt.setDate(monday.getDate()+d);
       const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+      const dow=dt.getDay(); // 0=dim,1=lun,...,5=ven,6=sam
+      const isCDIDay=dow>=1&&dow<=4; // lundi→jeudi = planning CDI
       if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)){
-        if(!wks[w].ferieChome) wks[w].ferieChome=0;
-        wks[w].ferieChome+=DAY7;
+        if(isCDIDay){
+          // Jour CDI chômé → réduit le seuil HS
+          if(!wks[w].ferieChome) wks[w].ferieChome=0;
+          wks[w].ferieChome+=DAY7;
+        }
+        // Si vendredi/samedi → va au compteur JF Récup (géré dans refreshLeave)
+        // Pas de réduction de seuil
       }
     }
   });
@@ -2392,13 +2423,21 @@ function calcCagnotteForMonth(yr, moisNum){
 
   Object.keys(wkMap).forEach(wk=>{
     const allInWeek=entries.filter(e=>e.type==='work'&&isoWeek(e.date)===wk);
-    const hMois=allInWeek.filter(e=>e.date>=monthStart&&e.date<=monthEnd).reduce((a,e)=>a+(e.netWork||e.netMin),0);
-    const hHors=allInWeek.filter(e=>e.date<monthStart||e.date>monthEnd).reduce((a,e)=>a+(e.netWork||e.netMin),0);
-    if(hMois<hHors) return; // semaine majoritairement dans l'autre mois
+    // FAUTE B FIX : exclure les trajets Lamotte de la base HS
+    // netWork = heures pures sans trajets pour TOUS les sites
+    const netWorkFn=e=>{
+      const siteExclu=SITES_EXCLUS.some(s=>(e.site||'').toLowerCase().includes(s.toLowerCase().split(' ')[0]));
+      // Pour Lamotte : si travel saisi, ne pas l'inclure dans la base HS
+      if(siteExclu) return Math.max(0,(e.netWork||e.netMin)-(e.travelMin||0));
+      return e.netWork||e.netMin;
+    };
+    const hMois=allInWeek.filter(e=>e.date>=monthStart&&e.date<=monthEnd).reduce((a,e)=>a+netWorkFn(e),0);
+    const hHors=allInWeek.filter(e=>e.date<monthStart||e.date>monthEnd).reduce((a,e)=>a+netWorkFn(e),0);
+    if(hMois<hHors) return;
 
-    const totSemaine=allInWeek.reduce((a,e)=>a+(e.netWork||e.netMin),0);
+    const totSemaine=allInWeek.reduce((a,e)=>a+netWorkFn(e),0);
 
-    // Fériés chômés
+    // Fériés chômés — FAUTE A FIX : uniquement jours CDI (lun-jeu)
     const[yrN,wnN]=wk.split('-W').map(Number);
     const jan4=new Date(yrN,0,4);
     const monday=new Date(jan4);
@@ -2407,7 +2446,9 @@ function calcCagnotteForMonth(yr, moisNum){
     for(let d=0;d<5;d++){
       const dt=new Date(monday); dt.setDate(monday.getDate()+d);
       const ds=dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());
-      if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)) fc+=DAY7;
+      const dow=dt.getDay();
+      const isCDIDay=dow>=1&&dow<=4;
+      if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)&&isCDIDay) fc+=DAY7;
       if(isJourSolidarite(ds)&&!workDates.has(ds)) fc+=DAY7;
     }
 
@@ -2502,6 +2543,14 @@ function renderReconciliation(paie){
   const moisLabel=moisNames[moisHS]+' '+anneeHS;
   const reconKey=anneeHS+'-'+moisHS;
 
+  // ── JF RÉCUP (Chantier 3) ──
+  const jfAcquisCW=calcJFRecupAcquis();
+  const jfPosesCW=entries.filter(e=>e.type==='leave'&&e.leaveType==='ferie_report').length;
+  const jfSoldeCW=Math.max(0,jfAcquisCW-jfPosesCW);
+  const jfAcquisFiche=paie.jf_recup_acquis||0;
+  const jfPosFiche=paie.jf_recup_pris||0;
+  const jfSoldeFiche=paie.jf_recup_solde||0;
+
   // ── Comparaison MENSUELLE ──
   const cwMois=calcCagnotteForMonth(anneeHS,moisHS);
   const cwMensuel=cwMois.totalRCR;
@@ -2538,6 +2587,37 @@ function renderReconciliation(paie){
   } else if(feriesNonCDI.length>0){
     htmlRecon+=`<div style="background:rgba(74,240,176,.06);border:1px solid rgba(74,240,176,.2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--grn);">🎉 Jours fériés récupérables : déjà comptabilisés ✅</div>`;
   }
+
+  // JF Récup — compteur aligné sur le bulletin
+  if(jfAcquisFiche>0||jfAcquisCW>0){
+    const jfEcart=jfSoldeCW-jfSoldeFiche;
+    htmlRecon+=`<div style="background:var(--sur2);border:1px solid var(--brd);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px;">🎉 Compteur JF Récup (art. 39 IDCC 1147)</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="color:rgba(255,255,255,.5);font-size:9px;text-transform:uppercase;">
+          <th style="text-align:left;padding:3px;"></th>
+          <th style="padding:3px;text-align:center;">Acquis</th>
+          <th style="padding:3px;text-align:center;">Pris</th>
+          <th style="padding:3px;text-align:center;">Solde</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid var(--brd);">
+            <td style="padding:4px;color:var(--blu);">🔵 ChronoWork</td>
+            <td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${jfAcquisCW}</td>
+            <td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${jfPosesCW}</td>
+            <td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;font-weight:700;">${jfSoldeCW}</td>
+          </tr>
+          <tr style="border-top:1px solid var(--brd);">
+            <td style="padding:4px;color:var(--acc);">🟠 Fiche de paie</td>
+            <td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${jfAcquisFiche}</td>
+            <td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;">${jfPosFiche}</td>
+            <td style="padding:4px;text-align:center;font-family:'DM Mono',monospace;font-weight:700;">${jfSoldeFiche}</td>
+          </tr>
+        </tbody>
+      </table>
+      ${jfEcart!==0?`<div style="font-size:10px;color:${jfEcart>0?'var(--red)':'var(--grn)'};margin-top:6px;">Écart solde : ${jfEcart>0?'+':''}${jfEcart}</div>`:'<div style="font-size:10px;color:var(--grn);margin-top:6px;">✅ Solde identique</div>'}
+    </div>`;
+  } // fin if JF Récup
 
   // Section 2 : Comparaison MENSUELLE
   htmlRecon+=`<div style="background:var(--sur2);border:1px solid var(--brd);border-radius:8px;padding:12px;margin-bottom:12px;">
@@ -3392,6 +3472,10 @@ function genReport(){
   L.push('  Période   : '+periodLabel);
   L.push('  Type      : '+typeLabel);
   L.push('  Établi le : '+ts);
+  if(isV3){
+    L.push('  Périmètre : V4 — Avril 2026 → présent (calcul hebdomadaire légal)');
+    L.push('  Note      : Fév-Mars 2026 = régime déclaratif antérieur, non inclus dans V4');
+  }
   L.push(DBL);
 
   // ── CDI/CDD ──
@@ -3403,16 +3487,25 @@ function genReport(){
     wList.forEach(e=>{ const w=isoWeek(e.date); if(!wkMap[w])wkMap[w]=[]; wkMap[w].push(e); });
 
     // Semaine complète pour calcul HS
-    // V3 : heures sans trajets (netWork)
+    // V3 : heures sans trajets (netWork) + Lamotte travel exclu (FAUTE B FIX)
     // V1 : heures avec trajets (netMin) — ancien calcul
     const wkMapFull={};
     Object.keys(wkMap).forEach(wk=>{
       const allDaysInWeek=entries.filter(e=>e.type==='work'&&isoWeek(e.date)===wk);
-      wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+(isV3?(e.netWork||e.netMin):e.netMin),0);
+      if(isV3){
+        // FAUTE B : exclure trajets Lamotte de la base HS
+        wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>{
+          const siteExclu=SITES_EXCLUS_TRAJET.some(s=>(e.site||'').toLowerCase().includes(s.toLowerCase().split(' ')[0]));
+          const net=siteExclu?Math.max(0,(e.netWork||e.netMin)-(e.travelMin||0)):(e.netWork||e.netMin);
+          return a+net;
+        },0);
+      } else {
+        wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>a+e.netMin,0);
+      }
     });
 
-    // Fériés chômés par semaine — UNIQUEMENT vrais jours fériés + Solidarité
-    // Les CP/RC posés ne réduisent PAS le seuil HS
+    // Fériés chômés — FAUTE A FIX : uniquement jours CDI (lun-jeu)
+    // Fériés ven/sam/dim → compteur JF Récup, PAS réduction de seuil
     const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
     const ferieChomeByWk={};
     Object.keys(wkMap).forEach(wk=>{
@@ -3424,9 +3517,11 @@ function genReport(){
       for(let d=0;d<5;d++){
         const dt=new Date(monday); dt.setDate(monday.getDate()+d);
         const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-        // Vrai jour férié chômé (non travaillé, hors solidarité)
-        if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)) fc+=DAY7;
-        // Journée de solidarité chômée
+        const dow=dt.getDay();
+        const isCDIDay=dow>=1&&dow<=4; // lun-jeu uniquement
+        // Vrai jour férié chômé sur jour CDI → réduit seuil
+        if(isFerie(ds)&&!workDates.has(ds)&&!isJourSolidarite(ds)&&isCDIDay) fc+=DAY7;
+        // Journée de solidarité chômée → réduit seuil
         if(isJourSolidarite(ds)&&!workDates.has(ds)) fc+=DAY7;
       }
       ferieChomeByWk[wk]=fc;
@@ -3580,8 +3675,11 @@ function genReport(){
       L.push('  ② CAGNOTTE TRAJETS (hors Lamotte-Beuvron)');
       L.push('  '+'-'.repeat(40));
       L.push('    Total trajets bruts      : '+hhmm(trajBruts));
-      L.push('    − '+hhmm(hPayees)+' payées en euros');
-      L.push('    Reste : '+hhmm(trajReste)+' × 1.25 = '+hhmm(trajResteMaj)+' (RCR trajets)');
+      L.push('    − '+hhmm(hPayees)+' payées en euros  → ✅ Validé (forfait employeur × 1.25)');
+      if(trajReste>0){
+        L.push('    Reste : '+hhmm(trajReste)+' × 1.25 = '+hhmm(trajResteMaj));
+        L.push('    ⚠️ À FORMALISER (art. L3121-4 CT) — créance non encore actée par l\'employeur');
+      }
     }
 
     // Cagnotte finale

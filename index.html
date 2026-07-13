@@ -2180,122 +2180,60 @@ function renderRCRControle(){
   const body=document.getElementById('rcr-controle-body');
   if(!card||!body) return;
 
-  // Récupérer les fiches de paie disponibles
-  const fiches=paieHistory.filter(p=>p.rcr_solde||p.rcr_acquis_mois).sort((a,b)=>
+  const fiches=paieHistory.filter(p=>p.rcr_solde||p.rcr_acquis).sort((a,b)=>
     a.annee!==b.annee?a.annee-b.annee:a.mois_num-b.mois_num
   );
-
-  if(!fiches.length){
-    card.style.display='none'; return;
-  }
+  if(!fiches.length){ card.style.display='none'; return; }
   card.style.display='block';
 
   const moisNames=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-  // Cagnotte ChronoWork globale
+  // ChronoWork : solde global restant
   const cag=calcCagnotte();
-  const cwSolde=cag.cagnotte; // solde global ChronoWork
+  const cwSolde=cag.cagnotte;
 
-  // Récupérer le choix de réconciliation stocké
-  const reconChoicesStored=JSON.parse(localStorage.getItem('cw4_recon')||'{}');
-
-  // Fiche la plus récente pour le solde Repos R
+  // Fiche : solde cumulé de la dernière fiche disponible
   const derniereFiche=fiches[fiches.length-1];
-  const ficheRCRSolde=derniereFiche.rcr_solde?ficheToMin(derniereFiche.rcr_solde):0;
+  const ficheSolde=ficheToMin(derniereFiche.rcr_solde||derniereFiche.rcr_acquis||0);
   const ficheLabel=moisNames[derniereFiche.mois_num]+' '+derniereFiche.annee;
 
-  // Calcul écart
-  const ecart=cwSolde-ficheRCRSolde;
-  const ecartPositif=ecart>=0;
+  const ecart=cwSolde-ficheSolde;
+  const positif=ecart>=0;
 
-  // Choix actuel (clé globale)
-  const globalReconKey='global';
-  const globalChoix=reconChoicesStored[globalReconKey]||{source:'cw'};
-  let srcCW=globalChoix.source==='cw';
-  const soldeActif=srcCW?cwSolde:ficheRCRSolde;
+  // Choix actuel
+  const reconStored=JSON.parse(localStorage.getItem('cw4_recon')||'{}');
+  let srcCW=(reconStored['global']||{source:'cw'}).source==='cw';
 
-  let html=`
-  <!-- Double cagnotte -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-    <div style="background:rgba(66,133,244,.1);border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};border-radius:8px;padding:10px;text-align:center;">
-      <div style="font-size:9px;font-weight:700;color:var(--blu);text-transform:uppercase;margin-bottom:4px;">🔵 ChronoWork (+25%/+50%)</div>
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--blu);">${hhmm(cwSolde)}</div>
-      <div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:2px;">${Math.floor(cwSolde/DAY7)} jour(s) disponibles</div>
-      ${srcCW?'<div style="font-size:9px;color:var(--blu);margin-top:4px;font-weight:700;">✅ Référence active</div>':''}
+  body.innerHTML=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+    <div style="background:rgba(66,133,244,.1);border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:9px;font-weight:700;color:var(--blu);text-transform:uppercase;margin-bottom:6px;">🔵 ChronoWork</div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--blu);">${hhmm(cwSolde)}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:3px;">${Math.floor(cwSolde/DAY7)} j disponibles</div>
+      ${srcCW?'<div style="font-size:9px;color:var(--blu);margin-top:4px;font-weight:700;">✅ Actif</div>':''}
     </div>
-    <div style="background:rgba(240,192,64,.08);border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};border-radius:8px;padding:10px;text-align:center;">
-      <div style="font-size:9px;font-weight:700;color:var(--acc);text-transform:uppercase;margin-bottom:4px;">🟠 Fiche (tout +25%)</div>
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--acc);">${hhmm(ficheRCRSolde)}</div>
-      <div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:2px;">${ficheLabel}</div>
-      ${!srcCW?'<div style="font-size:9px;color:var(--acc);margin-top:4px;font-weight:700;">✅ Référence active</div>':''}
+    <div style="background:rgba(240,192,64,.08);border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:9px;font-weight:700;color:var(--acc);text-transform:uppercase;margin-bottom:6px;">🟠 Fiche de paie</div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--acc);">${hhmm(ficheSolde)}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:3px;">${ficheLabel}</div>
+      ${!srcCW?'<div style="font-size:9px;color:var(--acc);margin-top:4px;font-weight:700;">✅ Actif</div>':''}
     </div>
   </div>
 
-  <!-- Écart -->
-  <div style="background:rgba(${ecartPositif?'74,240,176':'240,64,128'},.06);border:1px solid rgba(${ecartPositif?'74,240,176':'240,64,128'},.2);border-radius:8px;padding:10px;margin-bottom:12px;text-align:center;">
-    <div style="font-size:10px;color:rgba(255,255,255,.7);margin-bottom:4px;">Écart ChronoWork − Fiche</div>
-    <div style="font-size:16px;font-weight:800;color:${ecartPositif?'var(--grn)':'var(--red)'};">${ecartPositif?'+':''}${hhmm(Math.abs(ecart))}</div>
-    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;">${ecartPositif?'ChronoWork calcule plus (levier de réclamation)':'Fiche calcule plus'}</div>
+  <div style="background:rgba(${positif?'74,240,176':'240,64,128'},.06);border:1px solid rgba(${positif?'74,240,176':'240,64,128'},.25);border-radius:8px;padding:12px;text-align:center;margin-bottom:12px;">
+    <div style="font-size:10px;color:rgba(255,255,255,.7);margin-bottom:4px;">Différence (ChronoWork − Fiche)</div>
+    <div style="font-size:20px;font-weight:800;color:${positif?'var(--grn)':'var(--red)'};">${positif?'+':''}${hhmm(Math.abs(ecart))}</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:3px;">${positif?'⚖️ Levier de réclamation (+50% non appliqué)':'Fiche supérieure à ChronoWork'}</div>
   </div>
 
-  <!-- Boutons choix -->
-  <div style="display:flex;gap:8px;margin-bottom:14px;">
-    <button onclick="setGlobalReconSource('cw')" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};background:${srcCW?'rgba(66,133,244,.15)':'transparent'};color:${srcCW?'var(--blu)':'rgba(255,255,255,.5)'};">
+  <div style="display:flex;gap:8px;">
+    <button onclick="setGlobalReconSource('cw')" style="flex:1;padding:8px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${srcCW?'var(--blu)':'var(--brd)'};background:${srcCW?'rgba(66,133,244,.15)':'transparent'};color:${srcCW?'var(--blu)':'rgba(255,255,255,.5)'};">
       ${srcCW?'✅ ':''}🔵 Utiliser ChronoWork
     </button>
-    <button onclick="setGlobalReconSource('fiche')" style="flex:1;padding:8px;border-radius:6px;font-size:10px;cursor:pointer;border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};background:${!srcCW?'rgba(240,192,64,.15)':'transparent'};color:${!srcCW?'var(--acc)':'rgba(255,255,255,.5)'};">
+    <button onclick="setGlobalReconSource('fiche')" style="flex:1;padding:8px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${!srcCW?'var(--acc)':'var(--brd)'};background:${!srcCW?'rgba(240,192,64,.15)':'transparent'};color:${!srcCW?'var(--acc)':'rgba(255,255,255,.5)'};">
       ${!srcCW?'✅ ':''}🟠 Utiliser fiche
     </button>
   </div>`;
-
-  // Tableau de réconciliation mois par mois
-  html+=`<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Vérifications par mois (M-1)</div>`;
-  html+=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:10px;">
-    <thead><tr style="color:rgba(255,255,255,.5);font-size:9px;text-transform:uppercase;">
-      <th style="text-align:left;padding:4px;">Mois travail</th>
-      <th style="padding:4px;">RCR fiche</th>
-      <th style="padding:4px;">Vérif ×1.25</th>
-      <th style="padding:4px;">Solde fiche</th>
-      <th style="padding:4px;">✓</th>
-    </tr></thead><tbody>`;
-
-  let soldeN1=0;
-  fiches.forEach((fiche,idx)=>{
-    // RCR acquis = HS repos × 1.25
-    const rcr_acquis=ficheToMin(fiche.rcr_acquis_mois||0);
-    const hs_repos=ficheToMin(fiche.heures_supp_compteur||0);
-    const rcr_calcule=Math.round(hs_repos*1.25);
-    const rcr_ok=Math.abs(rcr_acquis-rcr_calcule)<5; // tolérance 5 min
-
-    // Solde = solde N-1 + acquis - posés
-    const reposP=entries.filter(e=>e.type==='leave'&&e.leaveType==='repos'&&
-      e.date.startsWith(fiche.annee+'-'+String(fiche.mois_num).padStart(2,'0'))).length;
-    const soldeCalcule=soldeN1+rcr_acquis-(reposP*DAY7);
-    const solde_fiche=ficheToMin(fiche.rcr_solde||0);
-    const solde_ok=Math.abs(soldeCalcule-solde_fiche)<30;
-
-    const moisTravail=fiche.mois_num===1?
-      moisNames[12]+' '+(fiche.annee-1):
-      moisNames[fiche.mois_num-1]+' '+fiche.annee;
-
-    html+=`<tr style="border-top:1px solid var(--brd);">
-      <td style="padding:5px;color:rgba(255,255,255,.8);">${moisTravail}<br><small style="color:rgba(255,255,255,.4);">fiche ${moisNames[fiche.mois_num]}</small></td>
-      <td style="padding:5px;text-align:center;font-family:'DM Mono',monospace;">${hhmm(rcr_acquis)}</td>
-      <td style="padding:5px;text-align:center;font-family:'DM Mono',monospace;color:${rcr_ok?'var(--grn)':'var(--red)'};">${hhmm(rcr_calcule)}</td>
-      <td style="padding:5px;text-align:center;font-family:'DM Mono',monospace;">${hhmm(solde_fiche)}</td>
-      <td style="padding:5px;text-align:center;">${rcr_ok&&solde_ok?'✅':'⚠️'}</td>
-    </tr>`;
-    soldeN1=solde_fiche;
-  });
-
-  html+=`</tbody></table></div>`;
-
-  // Note légale
-  html+=`<div style="margin-top:10px;font-size:10px;color:rgba(255,255,255,.5);line-height:1.5;">
-    ⚖️ <strong style="color:rgba(255,255,255,.7);">Levier de réclamation :</strong> L'écart ChronoWork − Fiche correspond aux heures >43h/semaine majorées à +50% au lieu de +25%. Chaque heure au-delà de 43h vous doit 0,25h de RCR supplémentaire.
-  </div>`;
-
-  body.innerHTML=html;
 }
 
 function setGlobalReconSource(source){

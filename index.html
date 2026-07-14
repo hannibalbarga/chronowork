@@ -3483,6 +3483,72 @@ function genReport(){
     // Sites dont les trajets sont EXCLUS en V3 (site de référence = Lamotte-Beuvron)
     const SITES_EXCLUS_TRAJET=isV3?['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte']:[];
 
+    // ── CALENDRIER DU MOIS (Option A — en tête) ──
+    if(from&&to){
+      const DOW=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      const workIndex=new Map(entries.filter(e=>e.type==='work').map(e=>[e.date,e]));
+      const leaveIndex=new Map(entries.filter(e=>e.type==='leave').map(e=>[e.date,e]));
+      const LEAVE_CAL={'cp':'📅 CP','repos':'🏖️ RC','ferie_report':'🎉 Férié récup.',
+                       'ferie':'🎉 Férié','maladie':'🤒 Maladie','autre':'📋 Autre'};
+
+      L.push('');
+      L.push('  CALENDRIER DU MOIS');
+      L.push('  '+'-'.repeat(62));
+
+      // Parcourir tous les jours de la période
+      let cur=from;
+      let nbTravail=0, nbCP=0, nbRC=0, nbFerie=0, nbNonSaisi=0;
+      while(cur<=to){
+        const dt=new Date(cur+'T12:00');
+        const dow=dt.getDay(); // 0=dim,6=sam
+        const dowLabel=DOW[dow];
+        const isWE=dow===0||dow===6;
+        const isVen=dow===5;
+        const isCDIDay=dow>=1&&dow<=4;
+
+        if(isWE){
+          L.push('  '+dowLabel+' '+dStr(cur)+'  ░░ Weekend');
+        } else {
+          const workEntry=workIndex.get(cur);
+          const leaveEntry=leaveIndex.get(cur);
+          const solidarite=isJourSolidarite(cur);
+
+          if(solidarite&&!workEntry){
+            L.push('  '+dowLabel+' '+dStr(cur)+'  ⚡ Solidarité');
+          } else if(workEntry){
+            const netH=workEntry.netWork!=null?workEntry.netWork:Math.max(0,workEntry.netMin-(workEntry.travelMin||0));
+            L.push('  '+dowLabel+' '+dStr(cur)+'  ✅ TRAVAIL    '+hhmm(netH).padEnd(8)+(workEntry.site||'—'));
+            nbTravail++;
+          } else if(leaveEntry){
+            const lbl=LEAVE_CAL[leaveEntry.leaveType]||leaveEntry.leaveType;
+            L.push('  '+dowLabel+' '+dStr(cur)+'  '+lbl);
+            if(leaveEntry.leaveType==='cp') nbCP++;
+            else if(leaveEntry.leaveType==='repos') nbRC++;
+            else if(leaveEntry.leaveType==='ferie'||leaveEntry.leaveType==='ferie_report') nbFerie++;
+          } else if(isCDIDay){
+            L.push('  '+dowLabel+' '+dStr(cur)+'  — Non saisi');
+            nbNonSaisi++;
+          } else {
+            // Vendredi non travaillé
+            L.push('  '+dowLabel+' '+dStr(cur)+'  —');
+          }
+        }
+
+        // Jour suivant
+        const next=new Date(cur+'T12:00'); next.setDate(next.getDate()+1);
+        cur=next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-'+String(next.getDate()).padStart(2,'0');
+      }
+
+      L.push('  '+'-'.repeat(62));
+      const parts=['Jours travaillés : '+nbTravail];
+      if(nbCP>0) parts.push('CP : '+nbCP);
+      if(nbRC>0) parts.push('RC : '+nbRC);
+      if(nbFerie>0) parts.push('Fériés : '+nbFerie);
+      if(nbNonSaisi>0) parts.push('Non saisis : '+nbNonSaisi);
+      L.push('  '+parts.join(' · '));
+      L.push('');
+    }
+
     const wkMap={};
     wList.forEach(e=>{ const w=isoWeek(e.date); if(!wkMap[w])wkMap[w]=[]; wkMap[w].push(e); });
 

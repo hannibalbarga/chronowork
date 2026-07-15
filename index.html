@@ -602,6 +602,7 @@ select option{background:var(--sur2);}
       <button class="btn bm" onclick="mailReport()" id="r-mail" style="display:none">✉ Ouvrir dans mail</button>
       <button class="btn bg" onclick="dlReport()" id="r-dl" style="display:none">⬇ Télécharger .txt</button>
       <button class="btn bi" onclick="exportPDF()" id="r-pdf" style="display:none">📄 Exporter PDF</button>
+      <button class="btn" onclick="exportHTML()" id="r-html" style="display:none;background:rgba(74,240,176,.15);border:1px solid var(--grn);color:var(--grn);">🌐 Exporter HTML</button>
     </div>
   </div>
   <div id="report-out" style="display:none;cursor:text;"></div>
@@ -3366,7 +3367,7 @@ function genReport(){
     const out=document.getElementById('report-out');
     out.textContent=L.join('\n');
     out.style.display='block';
-    ['r-sel','r-mail','r-dl','r-pdf'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='inline-block'; });
+    ['r-sel','r-mail','r-dl','r-pdf','r-html'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='inline-block'; });
     toast('✓ Proposition générée : '+periodLabel2);
     return;
   }
@@ -3442,7 +3443,7 @@ function genReport(){
     const out=document.getElementById('report-out');
     out.textContent=L.join('\n');
     out.style.display='block';
-    ['r-sel','r-mail','r-dl','r-pdf'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='inline-block'; });
+    ['r-sel','r-mail','r-dl','r-pdf','r-html'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='inline-block'; });
     toast('✓ Vacances générées : '+periodLabel2);
     return;
   }
@@ -4951,6 +4952,214 @@ function exportPDF(){
   a.href=url; a.target='_blank'; a.click();
   setTimeout(()=>URL.revokeObjectURL(url),5000);
   toast('📄 Page ouverte → "Imprimer" puis "Enregistrer en PDF"');
+}
+
+// ── EXPORT HTML COLORÉ ──
+function exportHTML(){
+  const name=document.getElementById('r-name').value||'Employé';
+  const periode=document.getElementById('r-period-lbl').value||'';
+  const from=document.getElementById('r-from').value;
+  const to=document.getElementById('r-to').value;
+  if(!from||!to){ toast('Sélectionnez une période.','err'); return; }
+
+  const date=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  const DOW=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const MOIS=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+  // Indexer les entrées
+  const workIdx=new Map(entries.filter(e=>e.type==='work').map(e=>[e.date,e]));
+  const leaveIdx=new Map(entries.filter(e=>e.type==='leave').map(e=>[e.date,e]));
+
+  // Construire les lignes du calendrier
+  let calRows='';
+  let nbTravail=0,nbCP=0,nbRC=0,nbFerie=0;
+  let lastWeek='';
+
+  let cur=from;
+  while(cur<=to){
+    const dt=new Date(cur+'T12:00');
+    const dow=dt.getDay();
+    const isWE=dow===0||dow===6;
+    const isVen=dow===5;
+    const dowLabel=DOW[dow];
+    const wk=isoWeek(cur);
+    const isFerieDay=isFerie(cur);
+    const isSol=isJourSolidarite(cur);
+
+    // Séparateur de semaine
+    if(wk!==lastWeek&&!isWE){
+      if(lastWeek!=='') calRows+=`<tr class="sep-row"><td colspan="4" style="padding:2px 0;"></td></tr>`;
+      lastWeek=wk;
+    }
+
+    if(isWE){
+      calRows+=`<tr class="row-we">
+        <td class="col-date">${dowLabel} ${dStr(cur)}</td>
+        <td class="col-status" colspan="3" style="color:#999;font-style:italic;">Weekend</td>
+      </tr>`;
+    } else if(isSol&&!workIdx.has(cur)){
+      calRows+=`<tr class="row-sol">
+        <td class="col-date">${dowLabel} ${dStr(cur)}</td>
+        <td class="col-status">⚡ Solidarité</td>
+        <td></td><td></td>
+      </tr>`;
+    } else if(isFerieDay&&!workIdx.has(cur)){
+      calRows+=`<tr class="row-ferie">
+        <td class="col-date">${dowLabel} ${dStr(cur)}</td>
+        <td class="col-status" colspan="3">🔴 ${getFerieNom(cur)}</td>
+      </tr>`;
+      nbFerie++;
+    } else if(workIdx.has(cur)){
+      const e=workIdx.get(cur);
+      const net=e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0));
+      calRows+=`<tr class="row-work">
+        <td class="col-date">${dowLabel} ${dStr(cur)}</td>
+        <td class="col-status">✅ TRAVAIL</td>
+        <td class="col-hours">${hhmm(net)}</td>
+        <td class="col-site">${e.site||'—'}</td>
+      </tr>`;
+      nbTravail++;
+    } else if(leaveIdx.has(cur)){
+      const e=leaveIdx.get(cur);
+      const ICONS={'cp':'📅 CP','repos':'🏖️ RC','ferie_report':'🎉 Férié récup.','ferie':'🎉 Férié','maladie':'🤒 Maladie','autre':'📋 Autre'};
+      const lbl=ICONS[e.leaveType]||e.leaveType;
+      const cls=e.leaveType==='cp'?'row-cp':e.leaveType==='repos'?'row-rc':'row-ferie';
+      calRows+=`<tr class="${cls}">
+        <td class="col-date">${dowLabel} ${dStr(cur)}</td>
+        <td class="col-status" colspan="3">${lbl}</td>
+      </tr>`;
+      if(e.leaveType==='cp') nbCP++;
+      else if(e.leaveType==='repos') nbRC++;
+      else if(e.leaveType==='ferie'||e.leaveType==='ferie_report') nbFerie++;
+    } else {
+      const cls=isVen?'row-ven':'row-empty';
+      calRows+=`<tr class="${cls}">
+        <td class="col-date">${dowLabel} ${dStr(cur)}</td>
+        <td class="col-status" colspan="3" style="color:#bbb;">—</td>
+      </tr>`;
+    }
+
+    const next=new Date(cur+'T12:00'); next.setDate(next.getDate()+1);
+    cur=next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-'+String(next.getDate()).padStart(2,'0');
+  }
+
+  // Déplacements
+  const wListH=entries.filter(e=>e.type==='work'&&e.date>=from&&e.date<=to);
+  const wkTrajet={};
+  const SITES_EX=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
+  wListH.forEach(e=>{
+    if(!e.travelMin||SITES_EX.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()))) return;
+    const wk=isoWeek(e.date);
+    if(!wkTrajet[wk]) wkTrajet[wk]={site:e.site,total:0};
+    wkTrajet[wk].total+=e.travelMin;
+  });
+
+  let trajetRows='';
+  let totalTrajet=0;
+  Object.entries(wkTrajet).sort().forEach(([wk,v])=>{
+    trajetRows+=`<tr><td style="padding:5px 8px;color:#555;">${wk}</td>
+      <td style="padding:5px 8px;">${v.site||'—'}</td>
+      <td style="padding:5px 8px;text-align:center;font-weight:600;">${hhmm(v.total)}</td>
+      <td style="padding:5px 8px;color:#888;font-size:11px;">aller + retour</td></tr>`;
+    totalTrajet+=v.total;
+  });
+  if(trajetRows) trajetRows+=`<tr style="border-top:2px solid #e0e0e0;font-weight:700;">
+    <td colspan="2" style="padding:5px 8px;">Total déplacements</td>
+    <td style="padding:5px 8px;text-align:center;">${hhmm(totalTrajet)}</td><td></td></tr>`;
+
+  // Résumé bas
+  const parts=[];
+  if(nbTravail) parts.push(`<span class="tag-work">${nbTravail} jour(s) travaillé(s)</span>`);
+  if(nbCP) parts.push(`<span class="tag-cp">${nbCP} CP</span>`);
+  if(nbRC) parts.push(`<span class="tag-rc">${nbRC} RC</span>`);
+  if(nbFerie) parts.push(`<span class="tag-ferie">${nbFerie} férié(s)</span>`);
+
+  const html=`<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<title>ChronoWork — ${name} — ${periode}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
+body{background:#f5f5f5;padding:16px;color:#212121;font-size:13px;}
+.page{max-width:750px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.1);overflow:hidden;}
+.header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;}
+.header h1{font-size:22px;font-weight:800;}.header h1 span{color:#f0c040;}
+.header-right{text-align:right;font-size:12px;color:rgba(255,255,255,.8);}
+.header-right strong{font-size:15px;color:#fff;display:block;}
+.btn-print{display:block;margin:10px 20px;padding:9px 18px;background:#1976d2;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;}
+.section-title{padding:10px 20px;background:#f8f8f8;border-bottom:2px solid #e0e0e0;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555;}
+table{width:100%;border-collapse:collapse;}
+.col-date{width:130px;padding:6px 20px;font-weight:500;}
+.col-status{width:160px;padding:6px 8px;font-weight:600;}
+.col-hours{width:70px;padding:6px 8px;text-align:center;font-family:monospace;font-weight:600;}
+.col-site{padding:6px 8px;color:#555;}
+.row-work{background:#f1f8e9;}.row-work .col-status{color:#2e7d32;}
+.row-cp{background:#f3e5f5;}.row-cp .col-status{color:#6a1b9a;}
+.row-rc{background:#e3f2fd;}.row-rc .col-status{color:#1565c0;}
+.row-ferie{background:#ffebee;}.row-ferie .col-status{color:#c62828;}
+.row-sol{background:#fff8e1;}.row-sol .col-status{color:#e65100;}
+.row-we{background:#fafafa;}.row-we td{color:#999!important;}
+.row-ven{background:#fff;}.row-ven td{color:#bbb!important;}
+.row-empty{background:#fff;}
+.sep-row td{border-top:1px solid #e8e8e8;}
+.summary{padding:12px 20px;background:#f8f8f8;border-top:2px solid #e0e0e0;display:flex;gap:8px;flex-wrap:wrap;}
+.tag-work{background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}
+.tag-cp{background:#f3e5f5;color:#6a1b9a;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}
+.tag-rc{background:#e3f2fd;color:#1565c0;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}
+.tag-ferie{background:#ffebee;color:#c62828;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}
+.footer{padding:10px 20px;background:#fafafa;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;font-size:10px;color:#999;}
+.sig-block{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.sig{border-top:1px solid #333;padding-top:6px;font-size:11px;color:#555;}
+@media print{body{background:#fff;padding:0;}.btn-print{display:none;}.page{box-shadow:none;border-radius:0;}
+  .row-work{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .row-cp{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .row-rc{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .row-ferie{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .row-we{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+@page{size:A4;margin:10mm;}
+</style></head><body>
+<div class="page">
+  <div class="header">
+    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.5 — Récapitulatif des heures</div></div>
+    <div class="header-right"><strong>${name}</strong>${periode}<br>${date}</div>
+  </div>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+  <div class="section-title">📅 Calendrier du mois</div>
+  <table>${calRows}</table>
+  <div class="summary">${parts.join('')}</div>
+  ${trajetRows?`<div class="section-title">🚗 Déplacements</div>
+  <table>${trajetRows}</table>`:''}
+  <div class="sig-block">
+    <div class="sig">Signature employeur<br><br><br>___________________________</div>
+    <div class="sig">Signature salarié<br><br><br>___________________________</div>
+  </div>
+  <div class="footer">
+    <span>ChronoWork v4.5 · ${name} · ${periode}</span>
+    <span>Généré le ${date}</span>
+  </div>
+</div>
+</body></html>`;
+
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+  toast('🌐 Rapport HTML ouvert — Ctrl+P pour PDF');
+}
+
+// Helper : nom du jour férié
+function getFerieNom(ds){
+  const yr=parseInt(ds.substring(0,4));
+  const suf=ds.substring(4);
+  const noms={'-01-01':'Jour de l\'An','-05-01':'Fête du Travail','-05-08':'Victoire 1945',
+    '-07-14':'Fête Nationale','-08-15':'Assomption','-11-01':'Toussaint',
+    '-11-11':'Armistice','-12-25':'Noël'};
+  if(noms[suf]) return noms[suf];
+  // Mobiles
+  const f=feries(yr);
+  // Ascension, Pâques, Pentecôte
+  return 'Jour férié';
 }
 
 

@@ -144,7 +144,7 @@ select option{background:var(--sur2);}
   <div class="logo">Chrono<span>Work</span><small>CDI · Intérim · Congés · HS</small></div>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <div class="wkbadge"><strong id="wk-label">—</strong>Semaine en cours</div>
-    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.6 — 15/07/2026</div>
+    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.7 — 15/07/2026</div>
     <div id="sync-status" style="font-size:9px;color:var(--tx3);">⏳ Connexion…</div>
     <button id="sync-retry-btn" onclick="retrySyncNow()" style="display:none;font-size:9px;background:rgba(240,192,64,.15);border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:2px 6px;cursor:pointer;margin-top:2px;">🔄 Reconnecter</button>
   </div>
@@ -2237,7 +2237,7 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  STATUT CYCLE DE VIE DES SAISIES
 //  prévu → à_vérifier → validé / écart
-//  Version : V4.6 — 15/07/2026
+//  Version : V4.7 — 15/07/2026
 // ════════════════════════════════════════════
 
 // Statuts possibles
@@ -5008,25 +5008,24 @@ function exportHTML(){
 
     // Séparateur de semaine
     if(wk!==lastWeek&&!isWE){
-      if(lastWeek!=='') calRows+=`<tr class="sep-row"><td colspan="4" style="padding:2px 0;"></td></tr>`;
+      if(lastWeek!=='') calRows+=`<tr class="sep-row"><td colspan="7" style="padding:2px 0;"></td></tr>`;
       lastWeek=wk;
     }
 
     if(isWE){
       calRows+=`<tr class="row-we">
         <td class="col-date">${dowLabel} ${dStr(cur)}</td>
-        <td class="col-status" colspan="3" style="color:#999;font-style:italic;">Weekend</td>
+        <td class="col-status" colspan="6" style="color:#999;font-style:italic;">Weekend</td>
       </tr>`;
     } else if(isSol&&!workIdx.has(cur)){
       calRows+=`<tr class="row-sol">
         <td class="col-date">${dowLabel} ${dStr(cur)}</td>
-        <td class="col-status">⚡ Solidarité</td>
-        <td></td><td></td>
+        <td class="col-status" colspan="6">⚡ Solidarité</td>
       </tr>`;
     } else if(isFerieDay&&!workIdx.has(cur)){
       calRows+=`<tr class="row-ferie">
         <td class="col-date">${dowLabel} ${dStr(cur)}</td>
-        <td class="col-status" colspan="3">🔴 ${getFerieNom(cur)}</td>
+        <td class="col-status" colspan="6">🔴 ${getFerieNom(cur)}</td>
       </tr>`;
       nbFerie++;
     } else if(workIdx.has(cur)){
@@ -5035,7 +5034,10 @@ function exportHTML(){
       calRows+=`<tr class="row-work">
         <td class="col-date">${dowLabel} ${dStr(cur)}</td>
         <td class="col-status">✅ TRAVAIL</td>
-        <td class="col-hours">${hhmm(net)}</td>
+        <td class="col-time" style="color:#2e7d32;">${e.start}</td>
+        <td class="col-time" style="color:#c62828;">${e.end}</td>
+        <td class="col-pause">${e.pauseIntegree?0:(e.break||0)}min</td>
+        <td class="col-dur">${hhmm(net)}</td>
         <td class="col-site">${e.site||'—'}</td>
       </tr>`;
       nbTravail++;
@@ -5046,7 +5048,7 @@ function exportHTML(){
       const cls=e.leaveType==='cp'?'row-cp':e.leaveType==='repos'?'row-rc':'row-ferie';
       calRows+=`<tr class="${cls}">
         <td class="col-date">${dowLabel} ${dStr(cur)}</td>
-        <td class="col-status" colspan="3">${lbl}</td>
+        <td class="col-status" colspan="6">${lbl}</td>
       </tr>`;
       if(e.leaveType==='cp') nbCP++;
       else if(e.leaveType==='repos') nbRC++;
@@ -5055,7 +5057,7 @@ function exportHTML(){
       const cls=isVen?'row-ven':'row-empty';
       calRows+=`<tr class="${cls}">
         <td class="col-date">${dowLabel} ${dStr(cur)}</td>
-        <td class="col-status" colspan="3" style="color:#bbb;">—</td>
+        <td class="col-status" colspan="6" style="color:#bbb;">—</td>
       </tr>`;
     }
 
@@ -5070,8 +5072,9 @@ function exportHTML(){
     if(!e.travelMin) return;
     const wk=isoWeek(e.date);
     const isLam=false; // Tous sites inclus (position négociation)
-    if(!wkTrajet[wk]) wkTrajet[wk]={site:e.site,total:0,isLamotte:false};
+    if(!wkTrajet[wk]) wkTrajet[wk]={site:e.site,total:0,isLamotte:false,types:new Set()};
     wkTrajet[wk].total+=e.travelMin;
+    if(e.travelType) wkTrajet[wk].types.add(e.travelType);
     if(isLam) wkTrajet[wk].isLamotte=true;
   });
 
@@ -5079,11 +5082,19 @@ function exportHTML(){
   let totalTrajet=0;
   Object.entries(wkTrajet).sort().forEach(([wk,v])=>{
     const isLam=v.isLamotte||false;
+    // Libellé selon les trajets réellement présents dans la période :
+    // semaine coupée par la fin/début de mois → un seul sens (aller OU retour)
+    const hasA=v.types&&v.types.has('aller'), hasR=v.types&&v.types.has('retour');
+    let legLabel;
+    if(hasA&&hasR) legLabel='aller + retour';
+    else if(hasA) legLabel='aller';
+    else if(hasR) legLabel='retour';
+    else legLabel='aller + retour'; // repli anciennes saisies sans travelType
     trajetRows+=`<tr${isLam?' style="background:#fff8e1"':''}>
       <td style="padding:5px 8px;color:#555;">${wk}</td>
       <td style="padding:5px 8px;">${v.site||'—'}${isLam?' <span style="font-size:10px;color:#e65100;">⚠️</span>':''}</td>
       <td style="padding:5px 8px;text-align:center;font-weight:600;color:${isLam?'#e65100':'#333'};">${hhmm(v.total)}</td>
-      <td style="padding:5px 8px;color:#888;font-size:11px;">aller + retour${isLam?' — en négociation':''}</td></tr>`;
+      <td style="padding:5px 8px;color:#888;font-size:11px;">${legLabel}${isLam?' — en négociation':''}</td></tr>`;
     totalTrajet+=v.total;
   });
   if(trajetRows) trajetRows+=`<tr style="border-top:2px solid #e0e0e0;font-weight:700;">
@@ -5213,10 +5224,15 @@ body{background:#f5f5f5;padding:16px;color:#212121;font-size:13px;}
 .btn-print{display:block;margin:10px 20px;padding:9px 18px;background:#1976d2;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;}
 .section-title{padding:10px 20px;background:#f8f8f8;border-bottom:2px solid #e0e0e0;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555;}
 table{width:100%;border-collapse:collapse;}
-.col-date{width:130px;padding:6px 20px;font-weight:500;}
-.col-status{width:160px;padding:6px 8px;font-weight:600;}
+.col-date{width:108px;padding:6px 14px;font-weight:500;}
+.col-status{width:118px;padding:6px 8px;font-weight:600;}
+.col-time{width:54px;padding:6px 6px;text-align:center;font-family:monospace;font-size:11px;}
+.col-pause{width:50px;padding:6px 6px;text-align:center;color:#888;font-size:10px;}
+.col-dur{width:62px;padding:6px 6px;text-align:center;font-family:monospace;font-weight:600;}
 .col-hours{width:70px;padding:6px 8px;text-align:center;font-family:monospace;font-weight:600;}
 .col-site{padding:6px 8px;color:#555;}
+.cal-head th{background:#f5f5f5;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;border-bottom:2px solid #e0e0e0;}
+.cal-head .col-date,.cal-head .col-status,.cal-head .col-site{text-align:left;}
 .row-work{background:#f1f8e9;}.row-work .col-status{color:#2e7d32;}
 .row-cp{background:#f3e5f5;}.row-cp .col-status{color:#6a1b9a;}
 .row-rc{background:#e3f2fd;}.row-rc .col-status{color:#1565c0;}
@@ -5245,12 +5261,20 @@ table{width:100%;border-collapse:collapse;}
 </style></head><body>
 <div class="page">
   <div class="header">
-    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.6 — Récapitulatif des heures</div></div>
+    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.7 — Récapitulatif des heures</div></div>
     <div class="header-right"><strong>${name}</strong>${periode}<br>${date}</div>
   </div>
   <button class="btn-print" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
   <div class="section-title">📅 Calendrier du mois</div>
-  <table>${calRows}</table>
+  <table><thead><tr class="cal-head">
+    <th class="col-date">Jour</th>
+    <th class="col-status">Statut</th>
+    <th class="col-time">Arrivée</th>
+    <th class="col-time">Départ</th>
+    <th class="col-pause">Pause</th>
+    <th class="col-dur">Durée</th>
+    <th class="col-site">Centre</th>
+  </tr></thead>${calRows}</table>
   <div class="summary">${parts.join('')}</div>
   ${trajetRows?`<div class="section-title">🚗 Déplacements</div>
   <table>${trajetRows}</table>`:''}
@@ -5260,7 +5284,7 @@ table{width:100%;border-collapse:collapse;}
     <div class="sig">Signature salarié<br><br><br>___________________________</div>
   </div>
   <div class="footer">
-    <span>ChronoWork v4.6 · ${name} · ${periode}</span>
+    <span>ChronoWork v4.7 · ${name} · ${periode}</span>
     <span>Généré le ${date}</span>
   </div>
 </div>

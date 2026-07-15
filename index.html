@@ -144,7 +144,7 @@ select option{background:var(--sur2);}
   <div class="logo">Chrono<span>Work</span><small>CDI · Intérim · Congés · HS</small></div>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <div class="wkbadge"><strong id="wk-label">—</strong>Semaine en cours</div>
-    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.5 — 13/07/2026</div>
+    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.6 — 15/07/2026</div>
     <div id="sync-status" style="font-size:9px;color:var(--tx3);">⏳ Connexion…</div>
     <button id="sync-retry-btn" onclick="retrySyncNow()" style="display:none;font-size:9px;background:rgba(240,192,64,.15);border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:2px 6px;cursor:pointer;margin-top:2px;">🔄 Reconnecter</button>
   </div>
@@ -2237,7 +2237,7 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  STATUT CYCLE DE VIE DES SAISIES
 //  prévu → à_vérifier → validé / écart
-//  Version : V4.5 — 13/07/2026
+//  Version : V4.6 — 15/07/2026
 // ════════════════════════════════════════════
 
 // Statuts possibles
@@ -5245,7 +5245,7 @@ table{width:100%;border-collapse:collapse;}
 </style></head><body>
 <div class="page">
   <div class="header">
-    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.5 — Récapitulatif des heures</div></div>
+    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.6 — Récapitulatif des heures</div></div>
     <div class="header-right"><strong>${name}</strong>${periode}<br>${date}</div>
   </div>
   <button class="btn-print" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
@@ -5260,7 +5260,7 @@ table{width:100%;border-collapse:collapse;}
     <div class="sig">Signature salarié<br><br><br>___________________________</div>
   </div>
   <div class="footer">
-    <span>ChronoWork v4.5 · ${name} · ${periode}</span>
+    <span>ChronoWork v4.6 · ${name} · ${periode}</span>
     <span>Généré le ${date}</span>
   </div>
 </div>

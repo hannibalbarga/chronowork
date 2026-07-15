@@ -917,10 +917,25 @@ function migrateEntries(){
       changed=true;
     }
   });
-  if(changed){
-    save();
-    console.log('Migration effectuée : Renoux → Renault');
-  }
+  // ── Migration pause ≤30 min = temps de travail (art.15 IDCC 1147) ──
+  // CDI/CDD uniquement, à partir du 01/04/2026 (période V4). Fév-Mars déclaratif = intouché.
+  // Idempotent : le marqueur pauseIntegree empêche tout double comptage.
+  let pauseChanged=false;
+  entries.forEach(e=>{
+    if(e.type==='work' && !e.pauseIntegree && e.date>='2026-04-01'){
+      const brk=e.break||0;
+      if(brk>0 && brk<=30){
+        const pur=(e.netWork!=null?e.netWork:Math.max(0,(e.netMin||0)-(e.travelMin||0)));
+        e.netWork=pur+brk;
+        e.netMin=(e.netMin||0)+brk;
+        e.pauseIntegree=true;
+        pauseChanged=true;
+      }
+    }
+  });
+  if(changed) console.log('Migration effectuée : Renoux → Renault');
+  if(pauseChanged) console.log('Migration pause ≤30 min → temps de travail (CDI, ≥01/04/2026)');
+  if(changed||pauseChanged) save();
 }
 
 async function loadFromFirebase(){
@@ -986,6 +1001,7 @@ function startRealtimeSync(){
         nid     = data.nid    || 1;
         localStorage.setItem('cw4_e', JSON.stringify(entries));
         localStorage.setItem('cw4_n', String(nid));
+        migrateEntries(); // applique la règle pause ≤30 aux entrées reçues d'un autre appareil (idempotent)
         renderAll(); refreshLeave(); updateSummary();
         setSyncStatus(true);
         toast('🔄 Données mises à jour depuis un autre appareil');
@@ -1299,7 +1315,10 @@ function addWork(){
 
   let s=tMin(start),e=tMin(end);
   if(e<=s) e+=1440;
-  const netWork=e-s-brk;
+  // Pause ≤30 min = temps de travail (art.15 IDCC 1147) — CDI/CDD, à partir du 01/04/2026
+  const pauseIntegree=(date>='2026-04-01' && brk>0 && brk<=30);
+  const brkEffectif=pauseIntegree?0:brk;
+  const netWork=e-s-brkEffectif;
   if(netWork<=0){ toast('Durée nette invalide.','err'); return; }
 
   // Trajet = temps de travail
@@ -1342,7 +1361,7 @@ function addWork(){
   const note=document.getElementById('w-note').value.trim();
   const netTotal=netWork+travelMin;
 
-  entries.push({id:nid++,type:'work',date,start,end,break:brk,netWork,travelMin,travelType,netMin:netTotal,site,note});
+  entries.push({id:nid++,type:'work',date,start,end,break:brk,netWork,travelMin,travelType,netMin:netTotal,site,note,pauseIntegree});
   save(); renderAll(); refreshLeave();
   toast('✓ '+dStr(date)+' : '+hhmm(netWork)+(travelMin?' + '+hhmm(travelMin)+' trajet '+travelType+' = '+hhmm(netTotal):'')+(note?' · '+note:''));
   document.getElementById('w-site').value='';
@@ -1894,7 +1913,7 @@ function renderWork(){
       <td>${dStr(e.date)}${isSolidarite?'<br><span style="font-size:9px;color:var(--acc);font-weight:700;">⚡ Journée Solidarité</span>':''}</td>
       <td style="color:var(--grn)">${e.start}</td>
       <td style="color:var(--red)">${e.end}</td>
-      <td style="color:var(--tx3)">${e.break}min</td>
+      <td style="color:var(--tx3)">${e.pauseIntegree?0:e.break}min</td>
       <td>${hhmm(nw)}</td>
       <td>${tCell}</td>
       <td><strong>${hhmm(tot)}</strong>${hs}</td>

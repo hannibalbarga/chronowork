@@ -1185,7 +1185,7 @@ function go(name){
   if(name==='paie') renderPaieHistorique();
   if(name==='report'){
     document.getElementById('report-out').style.display='none';
-    ['r-sel','r-mail','r-dl','r-hint'].forEach(x=>{ const el=document.getElementById(x); if(el) el.style.display='none'; });
+    ['r-sel','r-mail','r-dl','r-hint','r-html'].forEach(x=>{ const el=document.getElementById(x); if(el) el.style.display='none'; });
     const rp=document.getElementById('r-pdf'); if(rp) rp.style.display='none';
     const ha=document.getElementById('hs-accordion'); if(ha) ha.style.display='none';
     // Initialiser avec ce mois si pas encore de dates
@@ -3828,6 +3828,7 @@ function genReport(){
   ['r-sel','r-mail','r-dl','r-hint'].forEach(x=>document.getElementById(x).style.display='inline-flex');
   document.getElementById('r-hint').style.display='block';
   const rpdf=document.getElementById('r-pdf'); if(rpdf) rpdf.style.display='inline-flex';
+  const rhtml=document.getElementById('r-html'); if(rhtml) rhtml.style.display='inline-flex';
   if(wList.length){
     const wkMap2={};
     wList.forEach(e=>{ const w=isoWeek(e.date); if(!wkMap2[w])wkMap2[w]=[]; wkMap2[w].push(e); });

@@ -144,7 +144,7 @@ select option{background:var(--sur2);}
   <div class="logo">Chrono<span>Work</span><small>CDI · Intérim · Congés · HS</small></div>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <div class="wkbadge"><strong id="wk-label">—</strong>Semaine en cours</div>
-    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.7 — 15/07/2026</div>
+    <div style="font-size:8px;color:var(--tx3);text-align:right;">v4.9 — 15/07/2026</div>
     <div id="sync-status" style="font-size:9px;color:var(--tx3);">⏳ Connexion…</div>
     <button id="sync-retry-btn" onclick="retrySyncNow()" style="display:none;font-size:9px;background:rgba(240,192,64,.15);border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:2px 6px;cursor:pointer;margin-top:2px;">🔄 Reconnecter</button>
   </div>
@@ -1913,7 +1913,7 @@ function renderWork(){
       <td>${dStr(e.date)}${isSolidarite?'<br><span style="font-size:9px;color:var(--acc);font-weight:700;">⚡ Journée Solidarité</span>':''}</td>
       <td style="color:var(--grn)">${e.start}</td>
       <td style="color:var(--red)">${e.end}</td>
-      <td style="color:var(--tx3)">${e.pauseIntegree?0:e.break}min</td>
+      <td style="color:var(--tx3)">${e.break}min</td>
       <td>${hhmm(nw)}</td>
       <td>${tCell}</td>
       <td><strong>${hhmm(tot)}</strong>${hs}</td>
@@ -2237,7 +2237,7 @@ function calcCagnotte(){
 // ════════════════════════════════════════════
 //  STATUT CYCLE DE VIE DES SAISIES
 //  prévu → à_vérifier → validé / écart
-//  Version : V4.7 — 15/07/2026
+//  Version : V4.9 — 15/07/2026
 // ════════════════════════════════════════════
 
 // Statuts possibles
@@ -5036,7 +5036,7 @@ function exportHTML(){
         <td class="col-status">✅ TRAVAIL</td>
         <td class="col-time" style="color:#2e7d32;">${e.start}</td>
         <td class="col-time" style="color:#c62828;">${e.end}</td>
-        <td class="col-pause">${e.pauseIntegree?0:(e.break||0)}min</td>
+        <td class="col-pause">${e.break||0}min</td>
         <td class="col-dur">${hhmm(net)}</td>
         <td class="col-site">${e.site||'—'}</td>
       </tr>`;
@@ -5188,26 +5188,6 @@ function exportHTML(){
         </tr>
       </tbody>
     </table>
-
-    ${Object.keys(trajetSites).length>0?`<table style="width:100%;border-collapse:collapse;">
-      <thead><tr style="background:#f5f5f5;">
-        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#555;text-transform:uppercase;">Déplacements par site</th>
-        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Total</th>
-        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Statut</th>
-      </tr></thead>
-      <tbody>
-        ${Object.entries(trajetSites).map(([site,v])=>`<tr style="border-bottom:1px solid #eee;${v.isLamotte?'background:#fff8e1;':''}">
-          <td style="padding:7px 10px;">${site}</td>
-          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;color:${v.isLamotte?'#e65100':'#2e7d32'};">${hhmm(v.total)}</td>
-          <td style="padding:7px 10px;text-align:center;font-size:11px;color:${v.isLamotte?'#e65100':'#888'};">${v.isLamotte?'⚠️ En cours de négociation':'✓'}</td>
-        </tr>`).join('')}
-        <tr style="background:#f5f5f5;font-weight:700;border-top:2px solid #e0e0e0;">
-          <td style="padding:7px 10px;">Total déplacements</td>
-          <td style="padding:7px 10px;text-align:center;font-family:monospace;">${hhmm(totalTrajetR)}</td>
-          <td></td>
-        </tr>
-      </tbody>
-    </table>`:''}
   </div>`;
   const html=`<!DOCTYPE html>
 <html lang="fr"><head>
@@ -5261,7 +5241,7 @@ table{width:100%;border-collapse:collapse;}
 </style></head><body>
 <div class="page">
   <div class="header">
-    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.7 — Récapitulatif des heures</div></div>
+    <div><h1>Chrono<span>Work</span></h1><div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">v4.9 — Récapitulatif des heures</div></div>
     <div class="header-right"><strong>${name}</strong>${periode}<br>${date}</div>
   </div>
   <button class="btn-print" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
@@ -5284,7 +5264,7 @@ table{width:100%;border-collapse:collapse;}
     <div class="sig">Signature salarié<br><br><br>___________________________</div>
   </div>
   <div class="footer">
-    <span>ChronoWork v4.7 · ${name} · ${periode}</span>
+    <span>ChronoWork v4.9 · ${name} · ${periode}</span>
     <span>Généré le ${date}</span>
   </div>
 </div>

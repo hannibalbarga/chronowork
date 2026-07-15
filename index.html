@@ -5075,6 +5075,103 @@ function exportHTML(){
   if(nbRC) parts.push(`<span class="tag-rc">${nbRC} RC</span>`);
   if(nbFerie) parts.push(`<span class="tag-ferie">${nbFerie} férié(s)</span>`);
 
+  // Calcul récapitulatif
+  const wListH_recap=entries.filter(e=>e.type==='work'&&e.date>=from&&e.date<=to);
+  const totalHeuresNorm=wListH_recap.reduce((a,e)=>a+(e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0))),0);
+
+  // HS par semaine
+  const wkHSMap={};
+  const workDatesH=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
+  wListH_recap.forEach(e=>{
+    const wk=isoWeek(e.date);
+    if(!wkHSMap[wk]) wkHSMap[wk]=0;
+    wkHSMap[wk]+=(e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0)));
+  });
+  let hsT1=0,hsT2=0;
+  Object.values(wkHSMap).forEach(tot=>{
+    hsT1+=Math.max(0,Math.min(tot,W43)-W35);
+    hsT2+=Math.max(0,tot-W43);
+  });
+  const hsSans=Math.max(0,totalHeuresNorm-hsT1-hsT2);
+  const hsT1maj=Math.round(hsT1*0.25);
+  const hsT2maj=Math.round(hsT2*0.50);
+
+  // Trajets par site
+  const SITES_EX_R=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
+  const trajetSites={};
+  wListH_recap.forEach(e=>{
+    if(!e.travelMin||SITES_EX_R.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()))) return;
+    const site=e.site||'Autre';
+    if(!trajetSites[site]) trajetSites[site]=0;
+    trajetSites[site]+=e.travelMin;
+  });
+  const totalTrajetR=Object.values(trajetSites).reduce((a,b)=>a+b,0);
+
+  // HTML récapitulatif
+  let recapHTML=`<div class="section-title">📊 Récapitulatif du mois</div>
+  <div style="padding:16px 20px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div style="background:#e8f5e9;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;margin-bottom:4px;">Jours travaillés</div>
+        <div style="font-size:24px;font-weight:800;color:#2e7d32;">${nbTravail}</div>
+      </div>
+      <div style="background:#e3f2fd;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;margin-bottom:4px;">HS majorées</div>
+        <div style="font-size:24px;font-weight:800;color:#1565c0;">${hhmm(hsT1+hsT1maj+hsT2+hsT2maj)}</div>
+      </div>
+      <div style="background:#fff8e1;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;margin-bottom:4px;">Déplacements</div>
+        <div style="font-size:24px;font-weight:800;color:#e65100;">${hhmm(totalTrajetR)}</div>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+      <thead><tr style="background:#f5f5f5;">
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#555;text-transform:uppercase;">Heures de travail</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Base</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Majorées</th>
+      </tr></thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #eee;">
+          <td style="padding:7px 10px;">Heures normales (≤35h/sem)</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;">${hhmm(hsSans)}</td>
+          <td style="padding:7px 10px;text-align:center;color:#999;">—</td>
+        </tr>
+        ${hsT1>0?`<tr style="border-bottom:1px solid #eee;background:#f3f8ff;">
+          <td style="padding:7px 10px;color:#1565c0;">HS tranche +25% (35h→43h)</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;color:#1565c0;">${hhmm(hsT1)}</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:700;color:#1565c0;">→ ${hhmm(hsT1+hsT1maj)}</td>
+        </tr>`:''}
+        ${hsT2>0?`<tr style="border-bottom:1px solid #eee;background:#fff3e0;">
+          <td style="padding:7px 10px;color:#e65100;">HS tranche +50% (>43h)</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;color:#e65100;">${hhmm(hsT2)}</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:700;color:#e65100;">→ ${hhmm(hsT2+hsT2maj)}</td>
+        </tr>`:''}
+        <tr style="background:#e8f5e9;font-weight:700;border-top:2px solid #c8e6c9;">
+          <td style="padding:7px 10px;">Total HS majorées</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;">${hhmm(hsT1+hsT2)}</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;color:#2e7d32;">→ ${hhmm(hsT1+hsT1maj+hsT2+hsT2maj)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${Object.keys(trajetSites).length>0?`<table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:#f5f5f5;">
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#555;text-transform:uppercase;">Déplacements par site</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Total</th>
+      </tr></thead>
+      <tbody>
+        ${Object.entries(trajetSites).map(([site,min])=>`<tr style="border-bottom:1px solid #eee;">
+          <td style="padding:7px 10px;">${site}</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;color:#e65100;">${hhmm(min)}</td>
+        </tr>`).join('')}
+        <tr style="background:#fff8e1;font-weight:700;border-top:2px solid #ffe082;">
+          <td style="padding:7px 10px;">Total déplacements</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;color:#e65100;">${hhmm(totalTrajetR)}</td>
+        </tr>
+      </tbody>
+    </table>`:''}
+  </div>`;
   const html=`<!DOCTYPE html>
 <html lang="fr"><head>
 <meta charset="UTF-8">
@@ -5131,6 +5228,7 @@ table{width:100%;border-collapse:collapse;}
   <div class="summary">${parts.join('')}</div>
   ${trajetRows?`<div class="section-title">🚗 Déplacements</div>
   <table>${trajetRows}</table>`:''}
+  ${recapHTML}
   <div class="sig-block">
     <div class="sig">Signature employeur<br><br><br>___________________________</div>
     <div class="sig">Signature salarié<br><br><br>___________________________</div>

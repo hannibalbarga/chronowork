@@ -2132,7 +2132,7 @@ function calcCagnotte(){
   // Les trajets génèrent une contrepartie séparée
 
   const wks={};
-  const SITES_EXCLUS_HS=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
+  const SITES_EXCLUS_HS=[]; // Tous sites inclus dans les HS
 
   // 1. Heures réellement travaillées SANS les trajets
   // FAUTE B FIX : pour Lamotte (site référence), exclure aussi les trajets saisis de la base HS
@@ -2140,7 +2140,7 @@ function calcCagnotte(){
     const w=isoWeek(e.date);
     if(!wks[w]) wks[w]={work:0, ferieChome:0, solidarite:0};
     // Pour Lamotte : si travelMin saisi par erreur, on l'exclut de la base HS
-    const siteExclu=SITES_EXCLUS_HS.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()));
+    const siteExclu=false // Tous les sites inclus dans les trajets (négociation en cours);
     const netTravail=siteExclu
       ? (e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0)))
       : (e.netWork||e.netMin);
@@ -2410,8 +2410,8 @@ function calcCagnotteForMonth(yr, moisNum){
   const pad=n=>String(n).padStart(2,'0');
   const monthStart=yr+'-'+pad(moisNum)+'-01';
   const monthEnd=yr+'-'+pad(moisNum)+'-31';
-  const SITES_EXCLUS=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
-  const isSiteExclu=e=>(e.site||'').toLowerCase().split(' ').some(s=>SITES_EXCLUS.some(ex=>s.includes(ex.toLowerCase().split(' ')[0])));
+  const SITES_EXCLUS=[];
+  const isSiteExclu=e=>false // Tous les trajets comptabilisés;
   const workDates=new Set(entries.filter(e=>e.type==='work').map(e=>e.date));
 
   // Grouper par semaine les entrées du mois
@@ -2427,7 +2427,7 @@ function calcCagnotteForMonth(yr, moisNum){
     // FAUTE B FIX : exclure les trajets Lamotte de la base HS
     // netWork = heures pures sans trajets pour TOUS les sites
     const netWorkFn=e=>{
-      const siteExclu=SITES_EXCLUS.some(s=>(e.site||'').toLowerCase().includes(s.toLowerCase().split(' ')[0]));
+      const siteExclu=false // Tous les sites inclus dans les trajets (négociation en cours);
       // Pour Lamotte : si travel saisi, ne pas l'inclure dans la base HS
       if(siteExclu) return (e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0)));
       return e.netWork||e.netMin;
@@ -3482,7 +3482,7 @@ function genReport(){
   // ── CDI/CDD ──
   if(wList.length){
     // Sites dont les trajets sont EXCLUS en V3 (site de référence = Lamotte-Beuvron)
-    const SITES_EXCLUS_TRAJET=isV3?['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte']:[];
+    const SITES_EXCLUS_TRAJET=[]; // Tous sites inclus (position de négociation)
 
     // ── CALENDRIER DU MOIS (Option A — en tête) ──
     if(from&&to){
@@ -3562,7 +3562,7 @@ function genReport(){
       if(isV3){
         // FAUTE B : exclure trajets Lamotte de la base HS
         wkMapFull[wk]=allDaysInWeek.reduce((a,e)=>{
-          const siteExclu=SITES_EXCLUS_TRAJET.some(s=>(e.site||'').toLowerCase().includes(s.toLowerCase().split(' ')[0]));
+          const siteExclu=false // Tous les sites inclus dans les trajets (négociation en cours);
           const net=siteExclu?(e.netWork!=null?e.netWork:Math.max(0,e.netMin-(e.travelMin||0))):(e.netWork||e.netMin);
           return a+net;
         },0);
@@ -5047,21 +5047,24 @@ function exportHTML(){
   // Déplacements
   const wListH=entries.filter(e=>e.type==='work'&&e.date>=from&&e.date<=to);
   const wkTrajet={};
-  const SITES_EX=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
   wListH.forEach(e=>{
-    if(!e.travelMin||SITES_EX.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()))) return;
+    if(!e.travelMin) return;
     const wk=isoWeek(e.date);
-    if(!wkTrajet[wk]) wkTrajet[wk]={site:e.site,total:0};
+    const isLam=false; // Tous sites inclus (position négociation)
+    if(!wkTrajet[wk]) wkTrajet[wk]={site:e.site,total:0,isLamotte:false};
     wkTrajet[wk].total+=e.travelMin;
+    if(isLam) wkTrajet[wk].isLamotte=true;
   });
 
   let trajetRows='';
   let totalTrajet=0;
   Object.entries(wkTrajet).sort().forEach(([wk,v])=>{
-    trajetRows+=`<tr><td style="padding:5px 8px;color:#555;">${wk}</td>
-      <td style="padding:5px 8px;">${v.site||'—'}</td>
-      <td style="padding:5px 8px;text-align:center;font-weight:600;">${hhmm(v.total)}</td>
-      <td style="padding:5px 8px;color:#888;font-size:11px;">aller + retour</td></tr>`;
+    const isLam=v.isLamotte||false;
+    trajetRows+=`<tr${isLam?' style="background:#fff8e1"':''}>
+      <td style="padding:5px 8px;color:#555;">${wk}</td>
+      <td style="padding:5px 8px;">${v.site||'—'}${isLam?' <span style="font-size:10px;color:#e65100;">⚠️</span>':''}</td>
+      <td style="padding:5px 8px;text-align:center;font-weight:600;color:${isLam?'#e65100':'#333'};">${hhmm(v.total)}</td>
+      <td style="padding:5px 8px;color:#888;font-size:11px;">aller + retour${isLam?' — en négociation':''}</td></tr>`;
     totalTrajet+=v.total;
   });
   if(trajetRows) trajetRows+=`<tr style="border-top:2px solid #e0e0e0;font-weight:700;">
@@ -5097,15 +5100,16 @@ function exportHTML(){
   const hsT2maj=Math.round(hsT2*0.50);
 
   // Trajets par site
-  const SITES_EX_R=['IRM Lamotte-Beuvron','Lamotte-Beuvron','Lamotte'];
+  // Trajets : TOUS les sites inclus dans le rapport (y compris Lamotte)
   const trajetSites={};
   wListH_recap.forEach(e=>{
-    if(!e.travelMin||SITES_EX_R.some(s=>(e.site||'').toLowerCase().includes(s.split(' ')[0].toLowerCase()))) return;
+    if(!e.travelMin) return;
     const site=e.site||'Autre';
-    if(!trajetSites[site]) trajetSites[site]=0;
-    trajetSites[site]+=e.travelMin;
+    const isLamotte=false; // Tous sites inclus
+    if(!trajetSites[site]) trajetSites[site]={total:0,isLamotte};
+    trajetSites[site].total+=e.travelMin;
   });
-  const totalTrajetR=Object.values(trajetSites).reduce((a,b)=>a+b,0);
+  const totalTrajetR=Object.values(trajetSites).reduce((a,v)=>a+v.total,0);
 
   // HTML récapitulatif
   let recapHTML=`<div class="section-title">📊 Récapitulatif du mois</div>
@@ -5159,15 +5163,18 @@ function exportHTML(){
       <thead><tr style="background:#f5f5f5;">
         <th style="padding:7px 10px;text-align:left;font-size:11px;color:#555;text-transform:uppercase;">Déplacements par site</th>
         <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Total</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#555;">Statut</th>
       </tr></thead>
       <tbody>
-        ${Object.entries(trajetSites).map(([site,min])=>`<tr style="border-bottom:1px solid #eee;">
+        ${Object.entries(trajetSites).map(([site,v])=>`<tr style="border-bottom:1px solid #eee;${v.isLamotte?'background:#fff8e1;':''}">
           <td style="padding:7px 10px;">${site}</td>
-          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;color:#e65100;">${hhmm(min)}</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;font-weight:600;color:${v.isLamotte?'#e65100':'#2e7d32'};">${hhmm(v.total)}</td>
+          <td style="padding:7px 10px;text-align:center;font-size:11px;color:${v.isLamotte?'#e65100':'#888'};">${v.isLamotte?'⚠️ En cours de négociation':'✓'}</td>
         </tr>`).join('')}
-        <tr style="background:#fff8e1;font-weight:700;border-top:2px solid #ffe082;">
+        <tr style="background:#f5f5f5;font-weight:700;border-top:2px solid #e0e0e0;">
           <td style="padding:7px 10px;">Total déplacements</td>
-          <td style="padding:7px 10px;text-align:center;font-family:monospace;color:#e65100;">${hhmm(totalTrajetR)}</td>
+          <td style="padding:7px 10px;text-align:center;font-family:monospace;">${hhmm(totalTrajetR)}</td>
+          <td></td>
         </tr>
       </tbody>
     </table>`:''}
